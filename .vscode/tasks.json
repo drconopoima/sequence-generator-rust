@@ -1,0 +1,66 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cargo",
+			"subcommand": "check",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"label": "Rust: cargo check build - linked-list-rust"
+		},
+		{
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"build",
+				"--release"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": "none",
+			"label": "Rust: cargo build release - linked-list-rust"
+		},
+		{
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"fmt"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": "none",
+			"label": "Rust: cargo fmt - linked-list-rust"
+		},
+		{
+			"type": "cargo",
+			"subcommand": "run",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": "none",
+			"label": "Rust: cargo run debug - linked-list-rust"
+		},
+		{
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"test"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"label": "Rust: cargo test - linked-list-rust"
+		}
+	]
+}

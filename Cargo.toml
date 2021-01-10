@@ -1,0 +1,12 @@
+[package]
+name = "sequence-generator-rust"
+description = "64-bit IDs sequence generator based on the concepts outlined in Twitter Server's ID (formerly snowflake). Build in Rust"
+version = "0.1.0"
+authors = ["Luis Jesus Diaz Manzo <luis@drconopoima.com>"]
+edition = "2018"
+license = "Apache-2.0"
+repository = "https://github.com/drconopoima/sequence-generator-rust.git"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
