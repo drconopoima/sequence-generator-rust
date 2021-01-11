@@ -1,3 +1,5 @@
+use dotenv::dotenv;
+use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 use structopt::StructOpt;
 
@@ -7,12 +9,14 @@ struct Opt {
     number: usize,
     #[structopt(long, short)]
     custom_epoch: String,
-    #[structopt(default_value = "10", long, short)]
+    #[structopt(default_value = "10", long)]
     node_id_bits: u8,
-    #[structopt(default_value = "12", long, short)]
+    #[structopt(default_value = "12", long)]
     sequence_bits: u8,
-    #[structopt(default_value = "0", long, short)]
+    #[structopt(default_value = "0", long)]
     node_id: u16,
+    #[structopt(default_value = ".env", long)]
+    dotenv_file: String,
     #[structopt(long, short)]
     debug: bool,
 }
@@ -35,6 +39,23 @@ pub fn generate_id(
 }
 
 fn main() {
+    let mut args = Opt::from_args();
+    dotenv::from_filename(args.dotenv_file).ok();
+    for (key, value) in env::vars() {
+        if key == "CUSTOM_EPOCH" && value != "" {
+            args.custom_epoch = value.clone();
+            println!("CUSTOM_EPOCH: {}", args.custom_epoch)
+        }
+        if key == "NODE_ID_BITS" && value != "" {
+            args.node_id_bits = value.parse::<u8>().unwrap();
+            println!("NODE_ID_BITS: {}", args.node_id_bits)
+        }
+        if key == "SEQUENCE_BITS" && value != "" {
+            args.sequence_bits = value.parse::<u8>().unwrap();
+            println!("SEQUENCE_BITS: {}", args.sequence_bits)
+        }
+    }
+
     let millis_now = millis_from_custom_epoch(UNIX_EPOCH);
     println!("The current time in millis is {:#?}", millis_now)
 }
