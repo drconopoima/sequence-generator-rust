@@ -1,5 +1,6 @@
 use dotenv::dotenv;
 use std::env;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use structopt::StructOpt;
 
@@ -28,31 +29,71 @@ pub fn millis_from_custom_epoch(custom_epoch: SystemTime) -> u64 {
         .as_millis() as u64
 }
 
-pub fn generate_id(
-    custom_epoch: SystemTime,
-    node_id: u16,
-    node_id_bits: u8,
-    sequence_bits: u8,
-    debug: bool,
-) {
-    unimplemented!()
+pub struct SequenceGenerator {
+    sign_bits: u8,
+    timestamp_bits: u8,
+    pub node_id_bits: u8,
+    pub sequence_bits: u8,
+    pub custom_epoch: SystemTime,
+    last_millis: Option<u64>,
+    pub node_id: u16,
+}
+
+impl SequenceGenerator {
+    pub fn new(
+        custom_epoch: SystemTime,
+        node_id_bits: u8,
+        node_id: u16,
+        sequence_bits: u8,
+    ) -> Self {
+        let timestamp_bits = 64 - 1 - node_id_bits - sequence_bits;
+        SequenceGenerator {
+            custom_epoch,
+            timestamp_bits,
+            node_id_bits,
+            sequence_bits,
+            last_millis: None,
+            node_id,
+            sign_bits: 1,
+        }
+    }
+    pub fn generate_id(
+        &mut self,
+        custom_epoch: SystemTime,
+        node_id: u16,
+        node_id_bits: u8,
+        sequence_bits: u8,
+        debug: bool,
+    ) {
+        unimplemented!()
+    }
 }
 
 fn main() {
     let mut args = Opt::from_args();
-    dotenv::from_filename(args.dotenv_file).ok();
-    for (key, value) in env::vars() {
-        if key == "CUSTOM_EPOCH" && value != "" {
-            args.custom_epoch = value.clone();
-            println!("CUSTOM_EPOCH: {}", args.custom_epoch)
-        }
-        if key == "NODE_ID_BITS" && value != "" {
-            args.node_id_bits = value.parse::<u8>().unwrap();
-            println!("NODE_ID_BITS: {}", args.node_id_bits)
-        }
-        if key == "SEQUENCE_BITS" && value != "" {
-            args.sequence_bits = value.parse::<u8>().unwrap();
-            println!("SEQUENCE_BITS: {}", args.sequence_bits)
+    let dotenv_file = &args.dotenv_file;
+    if Path::new(dotenv_file).exists() {
+        dotenv::from_filename(dotenv_file).expect(&format!(
+            "Error: Could not retrieve environment variables from configuration file '{}'",
+            dotenv_file
+        ));
+        for (key, value) in env::vars() {
+            if key == "CUSTOM_EPOCH" && value != "" {
+                args.custom_epoch = value.clone();
+                println!("CUSTOM_EPOCH: {}", args.custom_epoch)
+            }
+            if key == "NODE_ID_BITS" && value != "" {
+                args.node_id_bits = value.parse::<u8>().expect(
+                    "Error: NODE_ID_BITS couldn't be interpreted as value between 0 and 255",
+                );
+                println!("NODE_ID_BITS: {}", args.node_id_bits)
+            }
+            if key == "SEQUENCE_BITS" && value != "" {
+                args.sequence_bits = value.parse::<u8>().expect(
+                    "Error: SEQUENCE_BITS couldn't be interpreted as value between 0 and 255",
+                );
+                println!("SEQUENCE_BITS: {}", args.sequence_bits)
+            }
         }
     }
 
