@@ -1,10 +1,37 @@
 use std::time::{SystemTime, UNIX_EPOCH};
+use structopt::StructOpt;
+
+#[derive(Debug, StructOpt)]
+struct Opt {
+    #[structopt(long, short)]
+    number: usize,
+    #[structopt(long, short)]
+    custom_epoch: String,
+    #[structopt(default_value = "10", long, short)]
+    node_id_bits: u8,
+    #[structopt(default_value = "12", long, short)]
+    sequence_bits: u8,
+    #[structopt(default_value = "0", long, short)]
+    node_id: u16,
+    #[structopt(long, short)]
+    debug: bool,
+}
 
 pub fn millis_from_custom_epoch(custom_epoch: SystemTime) -> u64 {
     SystemTime::now()
         .duration_since(custom_epoch)
         .expect("Error: Failed to create Timestamp from custom epoch.")
         .as_millis() as u64
+}
+
+pub fn generate_id(
+    custom_epoch: SystemTime,
+    node_id: u16,
+    node_id_bits: u8,
+    sequence_bits: u8,
+    debug: bool,
+) {
+    unimplemented!()
 }
 
 fn main() {
