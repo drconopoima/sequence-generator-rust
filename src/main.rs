@@ -29,7 +29,7 @@ pub fn millis_from_custom_epoch(custom_epoch: SystemTime) -> u64 {
         .as_millis() as u64
 }
 
-pub struct SequenceGenerator {
+pub struct SequenceProperties {
     sign_bits: u8,
     timestamp_bits: u8,
     pub node_id_bits: u8,
@@ -39,34 +39,39 @@ pub struct SequenceGenerator {
     pub node_id: u16,
 }
 
-impl SequenceGenerator {
+impl SequenceProperties {
     pub fn new(
         custom_epoch: SystemTime,
         node_id_bits: u8,
         node_id: u16,
         sequence_bits: u8,
     ) -> Self {
-        let timestamp_bits = 64 - 1 - node_id_bits - sequence_bits;
-        SequenceGenerator {
+        let sign_bits = 1;
+        let timestamp_bits = 64 - sign_bits - node_id_bits - sequence_bits;
+        SequenceProperties {
             custom_epoch,
             timestamp_bits,
             node_id_bits,
             sequence_bits,
             last_millis: None,
             node_id,
-            sign_bits: 1,
+            sign_bits,
         }
     }
-    pub fn generate_id(
-        &mut self,
-        custom_epoch: SystemTime,
-        node_id: u16,
-        node_id_bits: u8,
-        sequence_bits: u8,
-        debug: bool,
-    ) {
-        unimplemented!()
+}
+
+pub fn generate_id(properties: &mut SequenceProperties) -> u64 {
+    millis_from_custom_epoch(properties.custom_epoch)
+}
+pub fn generate_ids(number: usize, properties: &mut SequenceProperties, debug: bool) -> Vec<u64> {
+    let mut vector_ids: Vec<u64> = vec![0; number];
+    for id_element in 0..number {
+        vector_ids[id_element] = generate_id(properties);
+        if debug {
+            println! {"Index: {:?}, ID: {:?}", id_element, vector_ids[id_element]}
+        }
     }
+    vector_ids
 }
 
 fn main() {
@@ -97,8 +102,23 @@ fn main() {
         }
     }
 
-    let millis_now = millis_from_custom_epoch(UNIX_EPOCH);
-    println!("The current time in millis is {:#?}", millis_now)
+    let mut properties = SequenceProperties::new(
+        UNIX_EPOCH,
+        args.node_id_bits,
+        args.node_id,
+        args.sequence_bits,
+    );
+    let time_now = SystemTime::now();
+    generate_ids(args.number, &mut properties, args.debug);
+    if args.debug {
+        println!(
+            "It took {:?} nanoseconds",
+            time_now
+                .elapsed()
+                .expect("Error: Failed to get elapsed time.")
+                .as_nanos()
+        );
+    }
 }
 
 #[cfg(test)]
