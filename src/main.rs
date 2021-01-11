@@ -65,10 +65,14 @@ pub fn generate_id(properties: &mut SequenceProperties) -> u64 {
 }
 pub fn generate_ids(number: usize, properties: &mut SequenceProperties, debug: bool) -> Vec<u64> {
     let mut vector_ids: Vec<u64> = vec![0; number];
-    for id_element in 0..number {
-        vector_ids[id_element] = generate_id(properties);
-        if debug {
-            println! {"Index: {:?}, ID: {:?}", id_element, vector_ids[id_element]}
+    if debug {
+        for (item, element) in vector_ids.iter_mut().enumerate() {
+            *element = generate_id(properties);
+            println!("Item: {:?}, Timestamp: {:?}", item, element)
+        }
+    } else {
+        for element in vector_ids.iter_mut() {
+            *element = generate_id(properties);
         }
     }
     vector_ids
@@ -110,15 +114,13 @@ fn main() {
     );
     let time_now = SystemTime::now();
     generate_ids(args.number, &mut properties, args.debug);
-    if args.debug {
-        println!(
-            "It took {:?} nanoseconds",
-            time_now
-                .elapsed()
-                .expect("Error: Failed to get elapsed time.")
-                .as_nanos()
-        );
-    }
+    println!(
+        "It took {:?} nanoseconds",
+        time_now
+            .elapsed()
+            .expect("Error: Failed to get elapsed time.")
+            .as_nanos()
+    );
 }
 
 #[cfg(test)]
