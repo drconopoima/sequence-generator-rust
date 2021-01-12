@@ -9,12 +9,7 @@
       "request": "launch",
       "name": "Debug unit tests in binary 'sequence-generator-rust'",
       "cargo": {
-        "args": [
-          "test",
-          "--no-run",
-          "--bin",
-          "--package=sequence-generator-rust"
-        ],
+        "args": ["run", "--package=sequence-generator-rust"],
         "filter": {
           "name": "sequence-generator-rust",
           "kind": "bin"
