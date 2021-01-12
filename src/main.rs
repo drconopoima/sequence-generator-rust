@@ -1,4 +1,4 @@
-use dotenv::dotenv;
+use dotenv;
 use std::env;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
