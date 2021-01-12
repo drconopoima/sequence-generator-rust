@@ -6,9 +6,9 @@ use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 struct Opt {
-    #[structopt(long, short)]
+    #[structopt(default_value = "1", long, short)]
     number: usize,
-    #[structopt(long, short)]
+    #[structopt(default_value = "1970-01-01T00:00:00Z", long, short)]
     custom_epoch: String,
     #[structopt(default_value = "3", long)]
     micros_ten_power: u8,
@@ -18,7 +18,7 @@ struct Opt {
     sequence_bits: u8,
     #[structopt(default_value = "0", long)]
     node_id: u16,
-    #[structopt(default_value = "0", long)]
+    #[structopt(default_value = "1", long)]
     sign_bits: u8,
     #[structopt(default_value = ".env", long)]
     dotenv_file: String,
@@ -109,32 +109,38 @@ pub fn generate_id(properties: &mut SequenceProperties) -> u64 {
     ));
     if let Some(last_timestamp) = properties.last_timestamp {
         if properties.current_timestamp.unwrap() < last_timestamp {
-            panic!(
-                    "Error: System Clock moved backwards. New timestamp is earlier than previously registered."
-                )
+            panic!(format!(
+                    "Error: System Clock moved backwards. Current timestamp '{}' is earlier than last registered '{}'.", 
+                properties.current_timestamp.unwrap(), properties.last_timestamp.unwrap()))
+        } else if properties.current_timestamp.unwrap() != last_timestamp {
+            properties.sequence = 0;
         }
     }
     let new_id = to_id(properties);
     properties.sequence += 1;
     if properties.sequence == properties.max_sequence {
-        if properties.sequence == properties.max_sequence {
-            // wait_next_timestamp()
-        }
-    } else {
-        // if timestamp changed reset to start a new sequence
+        wait_next_timestamp(&properties);
+        // After timestamp changed reset to start a new sequence
         properties.sequence = 0;
     }
     new_id
 }
 
-// pub fn wait_next_timestamp() {}
+pub fn wait_next_timestamp(properties: &SequenceProperties) {
+    let mut current_timestamp =
+        timestamp_from_custom_epoch(properties.custom_epoch, properties.micros_ten_power);
+    while current_timestamp == properties.current_timestamp.unwrap() {
+        current_timestamp =
+            timestamp_from_custom_epoch(properties.custom_epoch, properties.micros_ten_power);
+    }
+}
 
 pub fn to_id(properties: &mut SequenceProperties) -> u64 {
     let timestamp_shift_bits = properties.node_id_bits + properties.sequence_bits;
-    let node_id_shift_bits = properties.sequence_bits;
+    let sequence_shift_bits = properties.sequence_bits;
     let mut id = properties.current_timestamp.unwrap() << (timestamp_shift_bits);
-    id |= (properties.node_id << node_id_shift_bits) as u64;
-    id |= properties.sequence as u64;
+    id |= (properties.sequence << sequence_shift_bits) as u64;
+    id |= properties.node_id as u64;
     id
 }
 
@@ -186,14 +192,26 @@ fn main() {
         args.micros_ten_power,
         args.sign_bits,
     );
-    let time_now = SystemTime::now();
-    let next_id = generate_id(&mut properties);
-    let elapsed = time_now
-        .elapsed()
-        .expect("Error: Failed to get elapsed time.")
-        .as_nanos();
-    println!("The id generated is: '{}'", next_id);
-    println!("It took {:?} nanoseconds", elapsed);
+    let mut vector_ids: Vec<u64> = vec![0; args.number];
+    if args.debug {
+        let time_now = SystemTime::now();
+        for element in vector_ids.iter_mut() {
+            *element = generate_id(&mut properties);
+        }
+        let elapsed = time_now
+            .elapsed()
+            .expect("Error: Failed to get elapsed time.")
+            .as_nanos();
+        for (index, element) in vector_ids.into_iter().enumerate() {
+            println!("Index: '{}', ID: '{}'", index, element);
+            println!("It took {:?} nanoseconds", elapsed);
+        }
+    } else {
+        for (index, element) in vector_ids.iter_mut().enumerate() {
+            *element = generate_id(&mut properties);
+            println!("Index: '{}', ID: '{}'", index, element);
+        }
+    }
 }
 
 #[cfg(test)]
