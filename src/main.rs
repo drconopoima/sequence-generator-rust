@@ -1,7 +1,8 @@
+use chrono::DateTime;
 use dotenv;
 use std::env;
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -49,8 +50,8 @@ pub fn timestamp_from_custom_epoch(custom_epoch: SystemTime, micros_ten_power: u
 }
 
 pub struct SequenceProperties {
-    sign_bits: u8,
-    timestamp_bits: u8,
+    pub sign_bits: u8,
+    pub timestamp_bits: u8,
     pub node_id_bits: u8,
     pub sequence_bits: u8,
     pub custom_epoch: SystemTime,
@@ -59,7 +60,7 @@ pub struct SequenceProperties {
     pub micros_ten_power: u8,
     pub node_id: u16,
     pub sequence: u16,
-    max_sequence: u16,
+    pub max_sequence: u16,
 }
 
 impl SequenceProperties {
@@ -109,9 +110,10 @@ pub fn generate_id(properties: &mut SequenceProperties) -> u64 {
     ));
     if let Some(last_timestamp) = properties.last_timestamp {
         if properties.current_timestamp.unwrap() < last_timestamp {
-            panic!(format!(
-                    "Error: System Clock moved backwards. Current timestamp '{}' is earlier than last registered '{}'.", 
-                properties.current_timestamp.unwrap(), properties.last_timestamp.unwrap()))
+            println!("Error: System Clock moved backwards. Current timestamp '{}' is earlier than last registered '{}'.", 
+                properties.current_timestamp.unwrap(), properties.last_timestamp.unwrap());
+            wait_next_timestamp(&properties);
+            properties.sequence = 0;
         } else if properties.current_timestamp.unwrap() != last_timestamp {
             properties.sequence = 0;
         }
@@ -129,7 +131,7 @@ pub fn generate_id(properties: &mut SequenceProperties) -> u64 {
 pub fn wait_next_timestamp(properties: &SequenceProperties) {
     let mut current_timestamp =
         timestamp_from_custom_epoch(properties.custom_epoch, properties.micros_ten_power);
-    while current_timestamp == properties.current_timestamp.unwrap() {
+    while current_timestamp <= properties.current_timestamp.unwrap() {
         current_timestamp =
             timestamp_from_custom_epoch(properties.custom_epoch, properties.micros_ten_power);
     }
@@ -184,8 +186,20 @@ fn main() {
         }
     }
 
+    let custom_epoch_millis = DateTime::parse_from_rfc3339(&args.custom_epoch)
+        .expect(&format!(
+            "Error: Could not parse CUSTOM_EPOCH '{}' as an RFC-3339/ISO-8601 datetime.",
+            args.custom_epoch
+        ))
+        .timestamp_millis();
+    let custom_epoch = UNIX_EPOCH
+        .checked_add(Duration::from_millis(custom_epoch_millis as u64))
+        .expect(&format!(
+            "Error: Could not generate a SystemTime custom epoch from milliseconds timestamp '{}'",
+            custom_epoch_millis
+        ));
     let mut properties = SequenceProperties::new(
-        UNIX_EPOCH,
+        custom_epoch,
         args.node_id_bits,
         args.node_id,
         args.sequence_bits,
@@ -203,13 +217,13 @@ fn main() {
             .expect("Error: Failed to get elapsed time.")
             .as_nanos();
         for (index, element) in vector_ids.into_iter().enumerate() {
-            println!("Index: '{}', ID: '{}'", index, element);
-            println!("It took {:?} nanoseconds", elapsed);
+            println!("{}: {}", index, element);
         }
+        println!("It took {:?} nanoseconds", elapsed);
     } else {
         for (index, element) in vector_ids.iter_mut().enumerate() {
             *element = generate_id(&mut properties);
-            println!("Index: '{}', ID: '{}'", index, element);
+            println!("{}: {}", index, element);
         }
     }
 }
@@ -220,7 +234,6 @@ mod tests {
     fn timestamp_from_custom_epoch() {
         use super::*;
         use std::thread::sleep;
-        use std::time::Duration;
         let time_now = SystemTime::now();
         let millis_start = time_now
             .duration_since(UNIX_EPOCH)
