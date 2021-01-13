@@ -2,6 +2,7 @@ use chrono::DateTime;
 use dotenv;
 use std::env;
 use std::path::Path;
+use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use structopt::StructOpt;
 
@@ -11,18 +12,20 @@ struct Opt {
     number: usize,
     #[structopt(default_value = "1970-01-01T00:00:00Z", long, short)]
     custom_epoch: String,
-    #[structopt(default_value = "3", long)]
+    #[structopt(default_value = "2", long)]
     micros_ten_power: u8,
-    #[structopt(default_value = "10", long)]
+    #[structopt(default_value = "9", long)]
     node_id_bits: u8,
-    #[structopt(default_value = "12", long)]
+    #[structopt(default_value = "11", long)]
     sequence_bits: u8,
     #[structopt(default_value = "0", long)]
     node_id: u16,
-    #[structopt(default_value = "1", long)]
+    #[structopt(default_value = "0", long)]
     sign_bits: u8,
     #[structopt(default_value = ".env", long)]
     dotenv_file: String,
+    #[structopt(default_value = "1500", long)]
+    cooldown_ns: u64,
     #[structopt(long, short)]
     debug: bool,
 }
@@ -61,6 +64,7 @@ pub struct SequenceProperties {
     pub node_id: u16,
     pub sequence: u16,
     pub max_sequence: u16,
+    pub backoff_cooldown_start_ns: u64,
 }
 
 impl SequenceProperties {
@@ -71,6 +75,7 @@ impl SequenceProperties {
         sequence_bits: u8,
         micros_ten_power: u8,
         sign_bits: u8,
+        backoff_cooldown_start_ns: u64,
     ) -> Self {
         let timestamp_bits = (64 as u8)
             .checked_sub(sequence_bits)
@@ -98,6 +103,7 @@ impl SequenceProperties {
             sign_bits,
             sequence: 0,
             max_sequence: (2 as u16).pow(sequence_bits.into()),
+            backoff_cooldown_start_ns,
         }
     }
 }
@@ -109,11 +115,31 @@ pub fn generate_id(properties: &mut SequenceProperties) -> u64 {
         properties.micros_ten_power,
     ));
     if let Some(last_timestamp) = properties.last_timestamp {
-        if properties.current_timestamp.unwrap() < last_timestamp {
+        let current_timestamp = properties.current_timestamp.unwrap();
+        if current_timestamp < last_timestamp {
             println!("Error: System Clock moved backwards. Current timestamp '{}' is earlier than last registered '{}'.", 
-                properties.current_timestamp.unwrap(), properties.last_timestamp.unwrap());
-            wait_next_timestamp(&properties);
-            properties.sequence = 0;
+                current_timestamp, last_timestamp);
+            if properties.sequence == properties.max_sequence {
+                wait_next_timestamp(
+                    last_timestamp,
+                    properties.custom_epoch,
+                    properties.micros_ten_power,
+                    properties.backoff_cooldown_start_ns,
+                );
+                // After timestamp changed reset to start a new sequence
+                properties.sequence = 0;
+            } else {
+                wait_until_last_timestamp(
+                    last_timestamp,
+                    properties.custom_epoch,
+                    properties.micros_ten_power,
+                    properties.backoff_cooldown_start_ns,
+                );
+            }
+            properties.current_timestamp = Some(timestamp_from_custom_epoch(
+                properties.custom_epoch,
+                properties.micros_ten_power,
+            ));
         } else if properties.current_timestamp.unwrap() != last_timestamp {
             properties.sequence = 0;
         }
@@ -121,19 +147,61 @@ pub fn generate_id(properties: &mut SequenceProperties) -> u64 {
     let new_id = to_id(properties);
     properties.sequence += 1;
     if properties.sequence == properties.max_sequence {
-        wait_next_timestamp(&properties);
+        wait_next_timestamp(
+            properties.last_timestamp.unwrap(),
+            properties.custom_epoch,
+            properties.micros_ten_power,
+            properties.backoff_cooldown_start_ns,
+        );
+        properties.current_timestamp = Some(timestamp_from_custom_epoch(
+            properties.custom_epoch,
+            properties.micros_ten_power,
+        ));
         // After timestamp changed reset to start a new sequence
         properties.sequence = 0;
     }
     new_id
 }
 
-pub fn wait_next_timestamp(properties: &SequenceProperties) {
-    let mut current_timestamp =
-        timestamp_from_custom_epoch(properties.custom_epoch, properties.micros_ten_power);
-    while current_timestamp <= properties.current_timestamp.unwrap() {
-        current_timestamp =
-            timestamp_from_custom_epoch(properties.custom_epoch, properties.micros_ten_power);
+pub fn wait_next_timestamp(
+    last_timestamp: u64,
+    custom_epoch: SystemTime,
+    micros_ten_power: u8,
+    backoff_cooldown_start_ns: u64,
+) {
+    let mut current_timestamp = timestamp_from_custom_epoch(custom_epoch, micros_ten_power);
+    let backoff_cooldown_ns: u64 = backoff_cooldown_start_ns;
+    while current_timestamp <= last_timestamp {
+        sleep(Duration::from_nanos(backoff_cooldown_ns));
+        current_timestamp = timestamp_from_custom_epoch(custom_epoch, micros_ten_power);
+        // Double the cooldown wait period (exponential backoff)
+        backoff_cooldown_ns
+            .checked_add(backoff_cooldown_ns)
+            .expect(&format!(
+                "Error: Cannot double backoff cooldown, maximum value reached '{}'",
+                backoff_cooldown_ns
+            ));
+    }
+}
+
+pub fn wait_until_last_timestamp(
+    last_timestamp: u64,
+    custom_epoch: SystemTime,
+    micros_ten_power: u8,
+    backoff_cooldown_start_ns: u64,
+) {
+    let mut current_timestamp = timestamp_from_custom_epoch(custom_epoch, micros_ten_power);
+    let backoff_cooldown_ns: u64 = backoff_cooldown_start_ns;
+    while current_timestamp < last_timestamp {
+        sleep(Duration::from_nanos(backoff_cooldown_ns));
+        current_timestamp = timestamp_from_custom_epoch(custom_epoch, micros_ten_power);
+        // Double the cooldown wait period (exponential backoff)
+        backoff_cooldown_ns
+            .checked_add(backoff_cooldown_ns)
+            .expect(&format!(
+                "Error: Cannot double backoff cooldown, maximum value reached '{}'",
+                backoff_cooldown_ns
+            ));
     }
 }
 
@@ -183,6 +251,12 @@ fn main() {
                     value
                 ));
             }
+            if key == "COOLDOWN_NS" && value != "" {
+                args.cooldown_ns = value.parse::<u64>().expect(&format!(
+                    "Error: COOLDOWN_NS '{}' couldn't be interpreted as an unsigned integer value",
+                    value
+                ));
+            }
         }
     }
 
@@ -205,6 +279,7 @@ fn main() {
         args.sequence_bits,
         args.micros_ten_power,
         args.sign_bits,
+        args.cooldown_ns,
     );
     let mut vector_ids: Vec<u64> = vec![0; args.number];
     if args.debug {
@@ -233,7 +308,6 @@ mod tests {
     #[test]
     fn timestamp_from_custom_epoch() {
         use super::*;
-        use std::thread::sleep;
         let time_now = SystemTime::now();
         let millis_start = time_now
             .duration_since(UNIX_EPOCH)
