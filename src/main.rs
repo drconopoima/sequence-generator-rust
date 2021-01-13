@@ -307,6 +307,10 @@ fn main() {
 mod tests {
     #[test]
     fn timestamp_from_custom_epoch() {
+        // Perform consistency tests for datetime calculation from a custom epoch
+        // First case: Compare system time against custom epoch set to UNIX_EPOCH
+        // Second case: Set CUSTOM_EPOCH to test start time and compare timestamp
+        // calculation against known sleep duration interval
         use super::*;
         let time_now = SystemTime::now();
         let millis_start = time_now
@@ -321,7 +325,9 @@ mod tests {
         // (although rather then a Normal distribution, it is instead the case that a Pareto
         // distribution applies, making it impossible to set high enough value for the test
         // not to fail on ocassion)
-        assert!((millis_after.checked_sub(millis_start as u64).unwrap()) >= 50);
+        let substracted_times = millis_after.checked_sub(millis_start as u64).unwrap();
+        println!("Too small time difference between times calculated\nfrom UNIX_EPOCH using independent functions.\n\nEpoch System Time - Time Difference w/Epoch = {} ms,\nexpected greater or equals than sleep interval 50 ms.\n", substracted_times);
+        assert!(substracted_times < 50);
         // If too big upper boundary there could be numerical errors.
         assert!((millis_after.checked_sub(millis_start as u64).unwrap()) < 90);
         // Test a CUSTOM EPOCH in tenths of a millisecond
@@ -342,15 +348,15 @@ mod tests {
             .expect("Error: Failed to get elapsed time.")
             .as_micros() as u64)
             / ten.pow(power_two);
+        let substracted_times = tenths_millis_elapsed_time
+            .checked_sub(tenths_millis_custom_epoch_time)
+            .unwrap();
+        println!("Too high time difference between calculated time from\nCustom Epoch set at test start and actual elapsed\ntime since the test started.\n\nElapsed Time - Calculated Time Custom Epoch = {} mcs,\nexpected under 100 mcs\n\nPlease note that Pareto distribution applies and it\nis impossible to ensure a high enough difference for\nthe test not to fail on ocassion.\n\nReview only after ensuring repeated failures.\n", substracted_times);
+        println!("substracted_times: {}", substracted_times);
         // Substract custom epoch result with Rust's own elapsed time
-        // Upper boundary uncertainty set up high at 150mcs more than expected 511mcs as exponential
+        // Upper boundary uncertainty set up high at 100mcs more than expected 511mcs as exponential
         // distribution, CPU low-power states and/or older hardware can cause signifficant differences.
-        assert!(
-            (tenths_millis_elapsed_time
-                .checked_sub(tenths_millis_custom_epoch_time)
-                .unwrap())
-                < 150
-        );
+        assert!(substracted_times < 100);
     }
 
     #[test]
