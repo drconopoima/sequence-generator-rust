@@ -316,9 +316,14 @@ mod tests {
         sleep(Duration::from_millis(50));
         // Test UNIX EPOCH
         let millis_after = timestamp_from_custom_epoch(UNIX_EPOCH, 3);
-        // 25ms more than expected 50ms as exponential distribution, CPU low-power
-        // states and/or older hardware can cause signifficant differences.
-        assert!((millis_after.checked_sub(millis_start as u64).unwrap()) < 75);
+        // More than expected 50ms. Upper boundary cannot be ascertained as Normal distribution
+        // CPU low-power states and/or older hardware can cause signifficant differences.
+        // (although rather then a Normal distribution, it is instead the case that a Pareto
+        // distribution applies, making it impossible to set high enough value for the test
+        // not to fail on ocassion)
+        assert!((millis_after.checked_sub(millis_start as u64).unwrap()) >= 50);
+        // If too big upper boundary there could be numerical errors.
+        assert!((millis_after.checked_sub(millis_start as u64).unwrap()) < 90);
         // Test a CUSTOM EPOCH in tenths of a millisecond
         let custom_epoch = UNIX_EPOCH
             .checked_add(Duration::from_millis(millis_start as u64))
@@ -338,13 +343,83 @@ mod tests {
             .as_micros() as u64)
             / ten.pow(power_two);
         // Substract custom epoch result with Rust's own elapsed time
-        // 150mcs more than expected 511mcs as exponential distribution, CPU low-power
-        // states and/or older hardware can cause signifficant differences.
+        // Upper boundary uncertainty set up high at 150mcs more than expected 511mcs as exponential
+        // distribution, CPU low-power states and/or older hardware can cause signifficant differences.
         assert!(
             (tenths_millis_elapsed_time
                 .checked_sub(tenths_millis_custom_epoch_time)
                 .unwrap())
                 < 150
         );
+    }
+
+    #[test]
+    fn wait_until_last_timestamp() {
+        // Case where system clock is readjusted 50ms into the past
+        // Current sequence wouldn't be exhausted but script cools down
+        // until at least matching the previously stored timestamp.
+        use super::*;
+        let calculated_time_after_50ms: u64 = SystemTime::now()
+            .checked_add(Duration::from_millis(50))
+            .unwrap()
+            .duration_since(UNIX_EPOCH)
+            .expect("Error: Failed to get duration from epoch of timestamp 50ms into the future.")
+            .as_millis() as u64;
+        // Function itself serves as an sleep call if correct
+        wait_until_last_timestamp(calculated_time_after_50ms, UNIX_EPOCH, 3, 1500);
+        // Wait a bit to prevent Option to call unwrap() on None below
+        // If both timestamps are within small margin substraction of u64
+        // can result in 'panicked at attempt to subtract with overflow'
+        // and checked_sub returns None value.
+        // Furthermore: It could also result in useless assert comparing
+        // if an unsigned integer is higher or equal to zero
+        sleep(Duration::from_millis(1));
+        let time_after_50ms: u64 = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Error: Failed to get current time as duration from epoch.")
+            .as_millis() as u64;
+        let substracted_times = time_after_50ms
+            .checked_sub(calculated_time_after_50ms)
+            .unwrap();
+        assert!(substracted_times > 0);
+        println!("Too high time difference while waiting for last timestamp\nafter clock moved backwards\n\nTime Calculated - Actual Time = {} ms, expected under 25 ms\n\nPlease note that Pareto distribution applies and it\nis impossible to ensure a high enough difference for\nthe test not to fail on ocassion.\n\nReview only after ensuring repeated failures.\n", substracted_times);
+        // Assert an upper boundary to how high of a difference there can be.
+        // If implementation is correct, the timestampts should be within few
+        // ms of one another according to a Normal distribution in recent
+        // hardware and normal CPU priority (although rather a Pareto
+        // distribution applies, making it impossible to set a value high
+        // enough for the test not to fail on ocassion)
+        assert!(substracted_times < 25);
+    }
+    #[test]
+    fn wait_next_timestamp() {
+        // Case where sequence would be exhausted and for that reason
+        // script cools down until at least there exists a difference
+        // between the current system time and the last known timestamp.
+        use super::*;
+        let calculated_time_after_10ms: u64 = SystemTime::now()
+            .checked_add(Duration::from_millis(10))
+            .unwrap()
+            .duration_since(UNIX_EPOCH)
+            .expect("Error: Failed to get duration from epoch of timestamp 50ms into the future.")
+            .as_millis() as u64;
+        // Function itself serves as an sleep call if correct
+        wait_next_timestamp(calculated_time_after_10ms, UNIX_EPOCH, 3, 1500);
+        let time_after_11ms: u64 = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Error: Failed to get current time as duration from epoch.")
+            .as_millis() as u64;
+        let substracted_times = time_after_11ms
+            .checked_sub(calculated_time_after_10ms)
+            .unwrap();
+        assert!(substracted_times > 0);
+        println!("Too high time difference while waiting for next timestamp\n\nNext timestamp - Last Timestamp = {} ms, expected under 25 ms\n\nPlease note that Pareto distribution applies and it\nis impossible to ensure a high enough difference for\nthe test not to fail on ocassion.\n\nReview only after ensuring repeated failures.\n", substracted_times);
+        // Assert an upper boundary to how high of a difference there can be.
+        // If implementation is correct, the timestampts should be within few
+        // ms of one another according to a Normal distribution in recent
+        // hardware and normal CPU priority (although rather a Pareto
+        // distribution applies, making it impossible to set a value high
+        // enough for the test not to fail on ocassion)
+        assert!(substracted_times < 25);
     }
 }
