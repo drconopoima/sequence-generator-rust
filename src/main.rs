@@ -51,6 +51,7 @@ pub fn timestamp_from_custom_epoch(custom_epoch: SystemTime, micros_ten_power: u
     }
 }
 
+#[derive(Debug)]
 pub struct SequenceProperties {
     pub sign_bits: u8,
     pub timestamp_bits: u8,
@@ -206,9 +207,9 @@ pub fn wait_until_last_timestamp(
 
 pub fn to_id(properties: &mut SequenceProperties) -> u64 {
     let timestamp_shift_bits = properties.node_id_bits + properties.sequence_bits;
-    let sequence_shift_bits = properties.sequence_bits;
-    let mut id = properties.current_timestamp.unwrap() << (timestamp_shift_bits);
-    id |= (properties.sequence << sequence_shift_bits) as u64;
+    let sequence_shift_bits = properties.node_id_bits;
+    let mut id = properties.current_timestamp.unwrap() << timestamp_shift_bits;
+    id |= ((properties.sequence as u64) << sequence_shift_bits) as u64;
     id |= properties.node_id as u64;
     id
 }
@@ -229,6 +230,16 @@ pub fn decode_id_unix_epoch_micros(id: u64, properties: &SequenceProperties) -> 
             "Error: Could not add the timestamp decoded from ID to the provided custom epoch."
         ))
         .as_micros() as u64
+}
+
+pub fn decode_node_id(id: u64, properties: &SequenceProperties) -> u16 {
+    ((id << (properties.sign_bits + properties.timestamp_bits + properties.sequence_bits))
+        >> (properties.sequence_bits + properties.timestamp_bits + properties.sign_bits)) as u16
+}
+
+pub fn decode_sequence_id(id: u64, properties: &SequenceProperties) -> u16 {
+    ((id << (properties.sign_bits + properties.timestamp_bits))
+        >> (properties.sign_bits + properties.timestamp_bits + properties.node_id_bits)) as u16
 }
 
 fn main() {
@@ -323,7 +334,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn timestamp_from_custom_epoch() {
+    fn timestamp_from() {
         // Perform consistency tests for datetime calculation from a custom epoch
         // First case: Compare system time against custom epoch set to UNIX_EPOCH
         // Second case: Set CUSTOM_EPOCH to test start time and compare timestamp
@@ -368,15 +379,14 @@ mod tests {
             .checked_sub(tenths_millis_custom_epoch_time)
             .unwrap();
         println!("Too high time difference between calculated time from\nCustom Epoch set at test start and actual elapsed\ntime since the test started.\n\nElapsed Time - Calculated Time Custom Epoch = {} mcs,\nexpected under 100 mcs\n\nPlease note that Pareto distribution applies and it\nis impossible to ensure a high enough difference for\nthe test not to fail on ocassion.\n\nReview only after ensuring repeated failures.\n", substracted_times);
-        println!("substracted_times: {}", substracted_times);
         // Substract custom epoch result with Rust's own elapsed time
-        // Upper boundary uncertainty set up high at 100mcs more than expected 511mcs as exponential
+        // Upper boundary uncertainty set up high at 200mcs more than expected 511mcs as exponential
         // distribution, CPU low-power states and/or older hardware can cause signifficant differences.
-        assert!(substracted_times < 100);
+        assert!(substracted_times < 200);
     }
 
     #[test]
-    fn wait_until_last_timestamp() {
+    fn wait_until() {
         // Case where system clock is readjusted 50ms into the past
         // Current sequence wouldn't be exhausted but script cools down
         // until at least matching the previously stored timestamp.
@@ -404,17 +414,17 @@ mod tests {
             .checked_sub(calculated_time_after_50ms)
             .unwrap();
         assert!(substracted_times > 0);
-        println!("Too high time difference while waiting for last timestamp\nafter clock moved backwards\n\nTime Calculated - Actual Time = {} ms, expected under 25 ms\n\nPlease note that Pareto distribution applies and it\nis impossible to ensure a high enough difference for\nthe test not to fail on ocassion.\n\nReview only after ensuring repeated failures.\n", substracted_times);
+        println!("Too high time difference while waiting for last timestamp\nafter clock moved backwards\n\nTime Calculated - Actual Time = {} ms, expected under 35 ms\n\nPlease note that Pareto distribution applies and it\nis impossible to ensure a high enough difference for\nthe test not to fail on ocassion.\n\nReview only after ensuring repeated failures.\n", substracted_times);
         // Assert an upper boundary to how high of a difference there can be.
         // If implementation is correct, the timestampts should be within few
         // ms of one another according to a Normal distribution in recent
         // hardware and normal CPU priority (although rather a Pareto
         // distribution applies, making it impossible to set a value high
         // enough for the test not to fail on ocassion)
-        assert!(substracted_times < 25);
+        assert!(substracted_times < 35);
     }
     #[test]
-    fn wait_next_timestamp() {
+    fn wait_next() {
         // Case where sequence would be exhausted and for that reason
         // script cools down until at least there exists a difference
         // between the current system time and the last known timestamp.
@@ -435,35 +445,35 @@ mod tests {
             .checked_sub(calculated_time_after_10ms)
             .unwrap();
         assert!(substracted_times > 0);
-        println!("Too high time difference while waiting for next timestamp\n\nNext timestamp - Last Timestamp = {} ms, expected under 25 ms\n\nPlease note that Pareto distribution applies and it\nis impossible to ensure a high enough difference for\nthe test not to fail on ocassion.\n\nReview only after ensuring repeated failures.\n", substracted_times);
+        println!("Too high time difference while waiting for next timestamp\n\nNext timestamp - Last Timestamp = {} ms, expected under 35 ms\n\nPlease note that Pareto distribution applies and it\nis impossible to ensure a high enough difference for\nthe test not to fail on ocassion.\n\nReview only after ensuring repeated failures.\n", substracted_times);
         // Assert an upper boundary to how high of a difference there can be.
         // If implementation is correct, the timestampts should be within few
         // ms of one another according to a Normal distribution in recent
         // hardware and normal CPU priority (although rather a Pareto
         // distribution applies, making it impossible to set a value high
         // enough for the test not to fail on ocassion)
-        assert!(substracted_times < 25);
+        assert!(substracted_times < 35);
     }
     #[test]
-    fn to_id() {
+    fn gen_id() {
         use super::*;
         use rand::Rng;
-        // snowflake with 42 bits timestamp (139 years)
+        // timestamp with 39 bits
         let custom_epoch = UNIX_EPOCH;
         // 2^16 node id (up to 65536)
         let node_id_bits = 16;
         // Several unused bits
-        let sign_bits = 5;
+        let sign_bits = 7;
         // 2^2 sequence (up to 4)
         // To test sequence overflow and wait behaviour, sequence bits unrealistically low
         let sequence_bits = 2;
-        // in milliseconds (10^3 mcs)
-        let micros_ten_power = 3;
+        // in centiseconds (10^4 mcs)
+        let micros_ten_power = 4;
         let mut rng = rand::thread_rng();
         // 0..2^16-1
         let node_id = rng.gen_range(0..65535);
         // if stalled until next millisecond, begin exponential backoff at 1,5 mcs
-        let backoff_cooldown_start_ns = 1500;
+        let backoff_cooldown_start_ns = 1_000_000;
         let mut properties = SequenceProperties::new(
             custom_epoch,
             node_id_bits,
@@ -474,23 +484,32 @@ mod tests {
             backoff_cooldown_start_ns,
         );
 
-        let last_timestamp = SystemTime::now()
+        let last_timestamp = (SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Error: Failed to get current time as duration from epoch.")
-            .as_millis() as u64;
-        // Ensure a new fresh millisecond
+            .as_millis()
+            / 10) as u64;
+        let mut vector_ids: Vec<u64> = vec![0; 5];
+        // Ensure a new fresh second
         wait_next_timestamp(
             last_timestamp,
             UNIX_EPOCH,
             micros_ten_power,
             backoff_cooldown_start_ns,
         );
-        let mut vector_ids: Vec<u64> = vec![0; 5];
         for element in vector_ids.iter_mut() {
             *element = generate_id(&mut properties);
         }
-        println!("{}", vector_ids[0]);
         let decoded_timestamp = decode_id_unix_epoch_micros(vector_ids[0], &properties);
-        assert_eq!(decoded_timestamp / 1000, last_timestamp + 1);
+        assert!(((decoded_timestamp / 10_000) - (last_timestamp + 1)) < 15);
+        let decoded_node_id = decode_node_id(vector_ids[0], &properties);
+        assert_eq!(decoded_node_id, node_id);
+        for index in 0..5 {
+            assert_eq!(
+                decode_sequence_id(vector_ids[index], &properties),
+                (index as u16) % 4
+            )
+        }
+        assert!(properties.current_timestamp.unwrap() - last_timestamp < 15);
     }
 }
