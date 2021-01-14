@@ -45,10 +45,9 @@ pub fn timestamp_from_custom_epoch(custom_epoch: SystemTime, micros_ten_power: u
             .expect("Error: Failed to create Timestamp from custom epoch.")
             .as_micros();
     }
-    let ten: u64 = 10;
     match micros_ten_power {
         0 => (timestamp as u64),
-        _ => (timestamp as u64) / ten.pow(micros_ten_power.into()),
+        _ => (timestamp as u64) / (10 as u64).pow(micros_ten_power.into()),
     }
 }
 
@@ -214,6 +213,24 @@ pub fn to_id(properties: &mut SequenceProperties) -> u64 {
     id
 }
 
+pub fn decode_id_unix_epoch_micros(id: u64, properties: &SequenceProperties) -> u64 {
+    let id_timestamp_custom_epoch = (id << (properties.sign_bits))
+        >> (properties.node_id_bits + properties.sequence_bits + properties.sign_bits);
+    let timestamp_micros =
+        id_timestamp_custom_epoch * (10 as u64).pow(properties.micros_ten_power as u32);
+    properties
+        .custom_epoch
+        .duration_since(UNIX_EPOCH)
+        .expect(&format!(
+            "Error: Could not calculate difference between timestamp decoded from ID and Unix epoch."
+        ))
+        .checked_add(Duration::from_micros(timestamp_micros))
+        .expect(&format!(
+            "Error: Could not add the timestamp decoded from ID to the provided custom epoch."
+        ))
+        .as_micros() as u64
+}
+
 fn main() {
     let mut args = Opt::from_args();
     let dotenv_file = &args.dotenv_file;
@@ -327,7 +344,7 @@ mod tests {
         // not to fail on ocassion)
         let substracted_times = millis_after.checked_sub(millis_start as u64).unwrap();
         println!("Too small time difference between times calculated\nfrom UNIX_EPOCH using independent functions.\n\nEpoch System Time - Time Difference w/Epoch = {} ms,\nexpected greater or equals than sleep interval 50 ms.\n", substracted_times);
-        assert!(substracted_times < 50);
+        assert!(substracted_times >= 50);
         // If too big upper boundary there could be numerical errors.
         assert!((millis_after.checked_sub(millis_start as u64).unwrap()) < 90);
         // Test a CUSTOM EPOCH in tenths of a millisecond
@@ -341,13 +358,12 @@ mod tests {
         // and checked_sub returns None value
         sleep(Duration::from_millis(2));
         // convert elapsed time from microseconds into tenths of a millisecond (0,1ms = 100 mcs)
-        let ten: u64 = 10;
         let power_two: u32 = 2;
         let tenths_millis_elapsed_time = (time_now
             .elapsed()
             .expect("Error: Failed to get elapsed time.")
             .as_micros() as u64)
-            / ten.pow(power_two);
+            / (10 as u64).pow(power_two);
         let substracted_times = tenths_millis_elapsed_time
             .checked_sub(tenths_millis_custom_epoch_time)
             .unwrap();
@@ -405,9 +421,9 @@ mod tests {
         use super::*;
         let calculated_time_after_10ms: u64 = SystemTime::now()
             .checked_add(Duration::from_millis(10))
-            .unwrap()
+            .expect("Error: Failed to 10ms to current timestamp.")
             .duration_since(UNIX_EPOCH)
-            .expect("Error: Failed to get duration from epoch of timestamp 50ms into the future.")
+            .expect("Error: Failed to get duration from epoch of timestamp 10ms into the future.")
             .as_millis() as u64;
         // Function itself serves as an sleep call if correct
         wait_next_timestamp(calculated_time_after_10ms, UNIX_EPOCH, 3, 1500);
@@ -427,5 +443,54 @@ mod tests {
         // distribution applies, making it impossible to set a value high
         // enough for the test not to fail on ocassion)
         assert!(substracted_times < 25);
+    }
+    #[test]
+    fn to_id() {
+        use super::*;
+        use rand::Rng;
+        // snowflake with 42 bits timestamp (139 years)
+        let custom_epoch = UNIX_EPOCH;
+        // 2^16 node id (up to 65536)
+        let node_id_bits = 16;
+        // Several unused bits
+        let sign_bits = 5;
+        // 2^2 sequence (up to 4)
+        // To test sequence overflow and wait behaviour, sequence bits unrealistically low
+        let sequence_bits = 2;
+        // in milliseconds (10^3 mcs)
+        let micros_ten_power = 3;
+        let mut rng = rand::thread_rng();
+        // 0..2^16-1
+        let node_id = rng.gen_range(0..65535);
+        // if stalled until next millisecond, begin exponential backoff at 1,5 mcs
+        let backoff_cooldown_start_ns = 1500;
+        let mut properties = SequenceProperties::new(
+            custom_epoch,
+            node_id_bits,
+            node_id,
+            sequence_bits,
+            micros_ten_power,
+            sign_bits,
+            backoff_cooldown_start_ns,
+        );
+
+        let last_timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Error: Failed to get current time as duration from epoch.")
+            .as_millis() as u64;
+        // Ensure a new fresh millisecond
+        wait_next_timestamp(
+            last_timestamp,
+            UNIX_EPOCH,
+            micros_ten_power,
+            backoff_cooldown_start_ns,
+        );
+        let mut vector_ids: Vec<u64> = vec![0; 5];
+        for element in vector_ids.iter_mut() {
+            *element = generate_id(&mut properties);
+        }
+        println!("{}", vector_ids[0]);
+        let decoded_timestamp = decode_id_unix_epoch_micros(vector_ids[0], &properties);
+        assert_eq!(decoded_timestamp / 1000, last_timestamp + 1);
     }
 }
