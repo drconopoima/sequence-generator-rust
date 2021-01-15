@@ -5,7 +5,9 @@
 ## Table of Contents
 
 - [Installation & build](#installation)
+- [Description](#description)
 - [Usage](#usage)
+- [Library](#Library)
 - [Support](#support)
 - [Contributing](#contributing)
 
@@ -19,7 +21,7 @@
 
 The binary was generated under `target/release/sequence-generator-rust`
 
-## Usage
+## Description
 
 You can generate sequential IDs based on timestamp, sequence number and node/worker ID (based on Twitter snowflake):
 
@@ -30,6 +32,8 @@ By default this package format defines:
 - 11 bits are used to store a sequence number (up to 2048)
 - There are no bits left unused.
 - Custom epoch is set to the beginning of current decade (2020-01-01)
+
+## Usage
 
 Expected output would be like the following
 
@@ -98,6 +102,42 @@ And change the example values to your liking.
 The prevalence of the dotenv values is higher than CLI parameters passed.
 
 The only supported custom epoch format is `RFC-3339/ISO-8601` both as CLI argument and from the dotenv file.
+
+## Library
+
+```rust
+use std::time::UNIX_EPOCH;
+use ::sequence_generator::*;
+
+let custom_epoch = UNIX_EPOCH;  // SystemTime object representing custom epoch time. Use checked_add(Duration) for different time
+let node_id_bits = 10;          // 10-bit node/worker ID
+let sequence_bits = 12;         // 12-bit sequence
+let unused_bits = 1;            // unused (sign) bits at the start of the ID. 1 or 0 generally
+let micros_ten_power = 3;       // Operate in milliseconds (10^3 microseconds)
+let node_id = 500;              // Current worker/node ID
+let cooldown_ns = 1500;         // initial time in nanoseconds for exponential backoff wait after sequence is exhausted
+
+// Generate SequenceProperties
+let properties = sequence_generator::SequenceProperties::new(
+        custom_epoch,
+        node_id_bits,
+        node_id,
+        sequence_bits,
+        micros_ten_power,
+        unused_bits,
+        cooldown_ns,
+    );
+
+// Generate an ID
+let id = sequence_generator::generate_id(&mut properties);
+// Decode ID
+// Timestamp
+let timestamp_micros = sequence_generator::decode_id_unix_epoch_micros(id, &properties);
+// Sequence
+let sequence = sequence_generator::decode_sequence_id(id, &properties);
+// Node ID
+let id_node = sequence_generator::decode_node_id(id, &properties);
+```
 
 ## Support
 
