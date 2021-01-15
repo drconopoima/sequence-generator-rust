@@ -10,7 +10,7 @@ use structopt::StructOpt;
 struct Opt {
     #[structopt(default_value = "1", long, short)]
     number: usize,
-    #[structopt(default_value = "1970-01-01T00:00:00Z", long, short)]
+    #[structopt(default_value = "2020-01-01T00:00:00Z", long, short)]
     custom_epoch: String,
     #[structopt(default_value = "2", long)]
     micros_ten_power: u8,
@@ -21,7 +21,7 @@ struct Opt {
     #[structopt(default_value = "0", long)]
     node_id: u16,
     #[structopt(default_value = "0", long)]
-    sign_bits: u8,
+    unused_bits: u8,
     #[structopt(default_value = ".env", long)]
     dotenv_file: String,
     #[structopt(default_value = "1500", long)]
@@ -53,7 +53,7 @@ pub fn timestamp_from_custom_epoch(custom_epoch: SystemTime, micros_ten_power: u
 
 #[derive(Debug)]
 pub struct SequenceProperties {
-    pub sign_bits: u8,
+    pub unused_bits: u8,
     pub timestamp_bits: u8,
     pub node_id_bits: u8,
     pub sequence_bits: u8,
@@ -74,7 +74,7 @@ impl SequenceProperties {
         node_id: u16,
         sequence_bits: u8,
         micros_ten_power: u8,
-        sign_bits: u8,
+        unused_bits: u8,
         backoff_cooldown_start_ns: u64,
     ) -> Self {
         let timestamp_bits = (64 as u8)
@@ -86,10 +86,10 @@ impl SequenceProperties {
                 "Error: Sum of bits is too large, maximum value 64. Node ID bits '{}', Sequence bits '{}'",
                 node_id_bits, sequence_bits
             ))
-            .checked_sub(sign_bits)
+            .checked_sub(unused_bits)
             .expect(&format!(
-                "Error: Sum of bits is too large, maximum value 64. Sign bits '{}', Sequence bits '{}', Node ID bits '{}'", 
-                sign_bits, sequence_bits, node_id_bits
+                "Error: Sum of bits is too large, maximum value 64. Unused bits '{}', Sequence bits '{}', Node ID bits '{}'", 
+                unused_bits, sequence_bits, node_id_bits
             ));
         SequenceProperties {
             custom_epoch,
@@ -100,7 +100,7 @@ impl SequenceProperties {
             last_timestamp: None,
             micros_ten_power,
             node_id,
-            sign_bits,
+            unused_bits,
             sequence: 0,
             max_sequence: (2 as u16).pow(sequence_bits.into()),
             backoff_cooldown_start_ns,
@@ -215,8 +215,8 @@ pub fn to_id(properties: &mut SequenceProperties) -> u64 {
 }
 
 pub fn decode_id_unix_epoch_micros(id: u64, properties: &SequenceProperties) -> u64 {
-    let id_timestamp_custom_epoch = (id << (properties.sign_bits))
-        >> (properties.node_id_bits + properties.sequence_bits + properties.sign_bits);
+    let id_timestamp_custom_epoch = (id << (properties.unused_bits))
+        >> (properties.node_id_bits + properties.sequence_bits + properties.unused_bits);
     let timestamp_micros =
         id_timestamp_custom_epoch * (10 as u64).pow(properties.micros_ten_power as u32);
     properties
@@ -233,13 +233,15 @@ pub fn decode_id_unix_epoch_micros(id: u64, properties: &SequenceProperties) -> 
 }
 
 pub fn decode_node_id(id: u64, properties: &SequenceProperties) -> u16 {
-    ((id << (properties.sign_bits + properties.timestamp_bits + properties.sequence_bits))
-        >> (properties.sequence_bits + properties.timestamp_bits + properties.sign_bits)) as u16
+    ((id << (properties.unused_bits + properties.timestamp_bits + properties.sequence_bits))
+        >> (properties.sequence_bits + properties.timestamp_bits + properties.unused_bits))
+        as u16
 }
 
 pub fn decode_sequence_id(id: u64, properties: &SequenceProperties) -> u16 {
-    ((id << (properties.sign_bits + properties.timestamp_bits))
-        >> (properties.sign_bits + properties.timestamp_bits + properties.node_id_bits)) as u16
+    ((id << (properties.unused_bits + properties.timestamp_bits))
+        >> (properties.unused_bits + properties.timestamp_bits + properties.node_id_bits))
+        as u16
 }
 
 fn main() {
@@ -258,24 +260,24 @@ fn main() {
             }
             if key == "NODE_ID_BITS" && value != "" {
                 args.node_id_bits = value.parse::<u8>().expect(&format!(
-                    "Error: NODE_ID_BITS '{}' couldn't be interpreted as value between 0 and 255",
+                    "Error: NODE_ID_BITS '{}' couldn't be interpreted as value between 0 and 64",
                     value
                 ));
             }
             if key == "SEQUENCE_BITS" && value != "" {
                 args.sequence_bits = value.parse::<u8>().expect(&format!(
-                    "Error: SEQUENCE_BITS '{}' couldn't be interpreted as value between 0 and 255",
+                    "Error: SEQUENCE_BITS '{}' couldn't be interpreted as value between 0 and 64",
                     value
                 ));
             }
             if key == "MICROS_TEN_POWER" && value != "" {
                 args.micros_ten_power = value.parse::<u8>().expect(&format!(
-                    "Error: MICROS_TEN_POWER '{}' couldn't be interpreted as value between 0 and 255", value)
+                    "Error: MICROS_TEN_POWER '{}' couldn't be interpreted as value between 0 and 64", value)
                 );
             }
-            if key == "SIGN_BITS" && value != "" {
-                args.sign_bits = value.parse::<u8>().expect(&format!(
-                    "Error: SIGN_BITS '{}' couldn't be interpreted as value between 0 and 255",
+            if key == "UNUSED_BITS" && value != "" {
+                args.unused_bits = value.parse::<u8>().expect(&format!(
+                    "Error: UNUSED_BITS '{}' couldn't be interpreted as value between 0 and 64",
                     value
                 ));
             }
@@ -306,7 +308,7 @@ fn main() {
         args.node_id,
         args.sequence_bits,
         args.micros_ten_power,
-        args.sign_bits,
+        args.unused_bits,
         args.cooldown_ns,
     );
     let mut vector_ids: Vec<u64> = vec![0; args.number];
@@ -463,7 +465,7 @@ mod tests {
         // 2^16 node id (up to 65536)
         let node_id_bits = 16;
         // Several unused bits
-        let sign_bits = 7;
+        let unused_bits = 7;
         // 2^2 sequence (up to 4)
         // To test sequence overflow and wait behaviour, sequence bits unrealistically low
         let sequence_bits = 2;
@@ -480,7 +482,7 @@ mod tests {
             node_id,
             sequence_bits,
             micros_ten_power,
-            sign_bits,
+            unused_bits,
             backoff_cooldown_start_ns,
         );
 
