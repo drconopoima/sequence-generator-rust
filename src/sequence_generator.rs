@@ -36,6 +36,7 @@ pub struct SequenceProperties {
     pub sequence: u16,
     pub max_sequence: u16,
     pub backoff_cooldown_start_ns: u64,
+    partial_cached_id: Option<u64>,
 }
 
 impl SequenceProperties {
@@ -75,6 +76,7 @@ impl SequenceProperties {
             sequence: 0,
             max_sequence: (2 as u16).pow(sequence_bits.into()),
             backoff_cooldown_start_ns,
+            partial_cached_id: None,
         }
     }
 }
@@ -176,13 +178,24 @@ fn wait_until_last_timestamp(
     }
 }
 
-fn to_id(properties: &mut SequenceProperties) -> u64 {
-    let timestamp_shift_bits = properties.node_id_bits + properties.sequence_bits;
-    let sequence_shift_bits = properties.node_id_bits;
-    let mut id = properties.current_timestamp.unwrap() << timestamp_shift_bits;
-    id |= ((properties.sequence as u64) << sequence_shift_bits) as u64;
-    id |= properties.node_id as u64;
+fn to_id_cached(properties: &mut SequenceProperties) -> u64 {
+    let mut id = properties.partial_cached_id.unwrap();
+    id |= ((properties.sequence as u64) << properties.node_id_bits) as u64;
     id
+}
+
+fn to_id(properties: &mut SequenceProperties) -> u64 {
+    if properties.sequence == 0 {
+        cache_partial_id(properties);
+    }
+    to_id_cached(properties)
+}
+
+fn cache_partial_id(properties: &mut SequenceProperties) {
+    let timestamp_shift_bits = properties.node_id_bits + properties.sequence_bits;
+    let mut id = properties.current_timestamp.unwrap() << timestamp_shift_bits;
+    id |= properties.node_id as u64;
+    properties.partial_cached_id = Some(id);
 }
 
 pub fn decode_id_unix_epoch_micros(id: u64, properties: &SequenceProperties) -> u64 {
