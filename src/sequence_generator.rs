@@ -399,13 +399,15 @@ mod tests {
         }
         let decoded_timestamp = decode_id_unix_epoch_micros(vector_ids[0], &properties);
         assert!(((decoded_timestamp / 10_000) - (last_timestamp + 1)) < 15);
-        let decoded_node_id = decode_node_id(vector_ids[0], &properties);
+        let mut decoded_node_id = decode_node_id(vector_ids[0], &properties);
         assert_eq!(decoded_node_id, node_id);
-        for index in 0..5 {
-            assert_eq!(
-                decode_sequence_id(vector_ids[index], &properties),
-                (index as u16) % 4
-            )
+        let mut decoded_seq_id = decode_sequence_id(vector_ids[0], &properties);
+        assert_eq!(decoded_seq_id, 0);
+        for index in 1..5 {
+            decoded_seq_id = decode_sequence_id(vector_ids[index], &properties);
+            assert_eq!(decoded_seq_id, (index as u16) % 4);
+            decoded_node_id = decode_node_id(vector_ids[index], &properties);
+            assert_eq!(decoded_node_id, node_id);
         }
         assert!(properties.current_timestamp.unwrap() - last_timestamp < 15);
     }
