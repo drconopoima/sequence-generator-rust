@@ -82,7 +82,7 @@ $ cargo run --release -- -n 8 -d --unused-bits 1 --node-id-bits 10 --sequence-bi
 It took 571 nanoseconds
 ```
 
-I wouldn't use Twitter's values nowadays. Hardware has advanced enough that with a single thread of a laptop average processor I'm generating each ID in ~60-70 nanoseconds, even when reaching close to the maximum sequence and stalling a bit waiting for the next millisecond, while the Twitter's defaults always generate the full sequence and then stalls for 55% of the time waiting (averaging 135-145ns per ID). Twitter's snowflakes are optimal if the hardware takes 245ns per ID or lower. Furthermore, having tenths of a millisecond precision means more accurate time & fast sorting if coupled with a Radix sort algorithm.
+I wouldn't use Twitter's values nowadays. Hardware has advanced enough that with a single thread of a laptop average processor I'm generating each ID in ~60-70 nanoseconds, even when reaching close to the maximum sequence and stalling a bit waiting for the next millisecond, while the Twitter's defaults always generate the full sequence and then stalls for 55% of the time waiting (averaging 135-145ns per ID). Twitter's snowflakes are optimal if the hardware takes 245ns per ID or more. Furthermore, having tenths of a millisecond precision means more accurate time & fast sorting if coupled with a Radix sort algorithm.
 
 The specific structure of the integers at the binary level includes:
 

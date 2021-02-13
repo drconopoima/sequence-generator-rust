@@ -100,15 +100,14 @@ fn main() {
     if args.debug {
         let time_now = SystemTime::now();
         for element in vector_ids.iter_mut() {
-            *element = sequence_generator::generate_id(&mut properties).map_or_else(
+            *element = sequence_generator::generate_id(&mut properties).unwrap_or_else(
                 |error| {
                     panic!(format!(
                         "SequenceGeneratorError: Failed to get ID from properties {:?}. SystemTimeError difference {:?}",
                         properties,
                         (error).duration()
                     ))
-                },
-                |id| id,
+                }
             );
         }
         let elapsed = time_now
@@ -121,15 +120,14 @@ fn main() {
         println!("It took {:?} nanoseconds", elapsed);
     } else {
         for (index, element) in vector_ids.iter_mut().enumerate() {
-            *element = sequence_generator::generate_id(&mut properties).map_or_else(
+            *element = sequence_generator::generate_id(&mut properties).unwrap_or_else(
                 |error| {
                     panic!(format!(
                         "SequenceGeneratorError: Failed to get ID from properties {:?}. SystemTimeError difference {:?}",
                         properties,
                         (error).duration()
                     ))
-                },
-                |id| id);
+                });
             println!("{}: {}", index, element);
         }
     }

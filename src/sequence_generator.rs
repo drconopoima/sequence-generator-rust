@@ -247,14 +247,13 @@ mod tests {
             .as_millis();
         sleep(Duration::from_millis(50));
         // Test UNIX EPOCH
-        let millis_after = timestamp_from_custom_epoch(UNIX_EPOCH, 3).map_or_else(
+        let millis_after = timestamp_from_custom_epoch(UNIX_EPOCH, 3).unwrap_or_else(
             |error| {
                 panic!(format!(
                     "SequenceGeneratorSystemTimeError: Failed to get timestamp from custom epoch {:?}, difference {:?}",
-                    UNIX_EPOCH, (error as SequenceGeneratorSystemTimeError).duration()
+                    UNIX_EPOCH, (error).duration()
                 ))
-            },
-            |duration| duration);
+            });
         // More than expected 50ms. Upper boundary cannot be ascertained as Normal distribution
         // CPU low-power states and/or older hardware can cause signifficant differences.
         // (although rather then a Normal distribution, it is instead the case that a Pareto
@@ -269,14 +268,13 @@ mod tests {
         let custom_epoch = UNIX_EPOCH
             .checked_add(Duration::from_millis(millis_start as u64))
             .expect("Error: Failed to create custom epoch.");
-        let tenths_millis_custom_epoch_time = timestamp_from_custom_epoch(custom_epoch, 2).map_or_else(
+        let tenths_millis_custom_epoch_time = timestamp_from_custom_epoch(custom_epoch, 2).unwrap_or_else(
             |error| {
                 panic!(format!(
                     "SequenceGeneratorSystemTimeError: Failed to get current timestamp from custom epoch {:?}, difference {:?}",
-                    UNIX_EPOCH, (error as SequenceGeneratorSystemTimeError).duration()
+                    UNIX_EPOCH, (error).duration()
                 ))
-            },
-            |timestamp| timestamp);
+            });
         // Wait a bit to prevent Option to call unwrap() on None below
         // If both timestamps are within small margin substraction of u64
         // can result in 'panicked at attempt to subtract with overflow'
@@ -288,7 +286,7 @@ mod tests {
             |error| {
                 panic!(format!(
                     "SequenceGeneratorSystemTimeError: Failed to get elapsed time, difference {:?}",
-                    (error as SequenceGeneratorSystemTimeError).duration()
+                    (error).duration()
                 ))
             },
             |duration| duration.as_micros() as u64,
@@ -428,14 +426,13 @@ mod tests {
             last_timestamp, UNIX_EPOCH
         ));
         for element in vector_ids.iter_mut() {
-            *element = generate_id(&mut properties).map_or_else(
+            *element = generate_id(&mut properties).unwrap_or_else(
                 |error| {
                     panic!(format!(
                         "SequenceGeneratorSystemTimeError: Failed to get timestamp from custom epoch {:?}, difference {:?}",
-                        UNIX_EPOCH, (error as SequenceGeneratorSystemTimeError).duration()
+                        UNIX_EPOCH, (error).duration()
                     ))
-                },
-                |duration| duration);
+                });
         }
         let decoded_timestamp = decode_id_unix_epoch_micros(vector_ids[0], &properties);
         assert!(((decoded_timestamp / 10_000) - (last_timestamp + 1)) < 15);
