@@ -1,24 +1,23 @@
 use std::thread::sleep;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH};
 
-fn timestamp_from_custom_epoch(custom_epoch: SystemTime, micros_ten_power: u8) -> u64 {
+pub type SequenceGeneratorSystemTimeError = SystemTimeError;
+
+fn timestamp_from_custom_epoch(
+    custom_epoch: SystemTime,
+    micros_ten_power: u8,
+) -> Result<u64, SequenceGeneratorSystemTimeError> {
     let timestamp;
     let mut micros_ten_power = micros_ten_power;
     if micros_ten_power >= 3 {
-        timestamp = SystemTime::now()
-            .duration_since(custom_epoch)
-            .expect("Error: Failed to create Timestamp from custom epoch.")
-            .as_millis();
+        timestamp = SystemTime::now().duration_since(custom_epoch)?.as_millis();
         micros_ten_power -= 3;
     } else {
-        timestamp = SystemTime::now()
-            .duration_since(custom_epoch)
-            .expect("Error: Failed to create Timestamp from custom epoch.")
-            .as_micros();
+        timestamp = SystemTime::now().duration_since(custom_epoch)?.as_micros();
     }
     match micros_ten_power {
-        0 => (timestamp as u64),
-        _ => (timestamp as u64) / (10 as u64).pow(micros_ten_power.into()),
+        0 => Ok(timestamp as u64),
+        _ => Ok((timestamp as u64) / (10 as u64).pow(micros_ten_power.into())),
     }
 }
 
@@ -81,12 +80,14 @@ impl SequenceProperties {
     }
 }
 
-pub fn generate_id(properties: &mut SequenceProperties) -> u64 {
+pub fn generate_id(
+    properties: &mut SequenceProperties,
+) -> Result<u64, SequenceGeneratorSystemTimeError> {
     properties.last_timestamp = properties.current_timestamp;
     properties.current_timestamp = Some(timestamp_from_custom_epoch(
         properties.custom_epoch,
         properties.micros_ten_power,
-    ));
+    )?);
     if let Some(last_timestamp) = properties.last_timestamp {
         let current_timestamp = properties.current_timestamp.unwrap();
         if current_timestamp < last_timestamp {
@@ -98,7 +99,7 @@ pub fn generate_id(properties: &mut SequenceProperties) -> u64 {
                     properties.custom_epoch,
                     properties.micros_ten_power,
                     properties.backoff_cooldown_start_ns,
-                );
+                )?;
                 // After timestamp changed reset to start a new sequence
                 properties.sequence = 0;
             } else {
@@ -107,12 +108,12 @@ pub fn generate_id(properties: &mut SequenceProperties) -> u64 {
                     properties.custom_epoch,
                     properties.micros_ten_power,
                     properties.backoff_cooldown_start_ns,
-                );
+                )?;
             }
             properties.current_timestamp = Some(timestamp_from_custom_epoch(
                 properties.custom_epoch,
                 properties.micros_ten_power,
-            ));
+            )?);
         } else if properties.current_timestamp.unwrap() != last_timestamp {
             properties.sequence = 0;
         }
@@ -125,15 +126,15 @@ pub fn generate_id(properties: &mut SequenceProperties) -> u64 {
             properties.custom_epoch,
             properties.micros_ten_power,
             properties.backoff_cooldown_start_ns,
-        );
+        )?;
         properties.current_timestamp = Some(timestamp_from_custom_epoch(
             properties.custom_epoch,
             properties.micros_ten_power,
-        ));
+        )?);
         // After timestamp changed reset to start a new sequence
         properties.sequence = 0;
     }
-    new_id
+    Ok(new_id)
 }
 
 fn wait_next_timestamp(
@@ -141,12 +142,12 @@ fn wait_next_timestamp(
     custom_epoch: SystemTime,
     micros_ten_power: u8,
     backoff_cooldown_start_ns: u64,
-) {
-    let mut current_timestamp = timestamp_from_custom_epoch(custom_epoch, micros_ten_power);
+) -> Result<(), SequenceGeneratorSystemTimeError> {
+    let mut current_timestamp = timestamp_from_custom_epoch(custom_epoch, micros_ten_power)?;
     let backoff_cooldown_ns: u64 = backoff_cooldown_start_ns;
     while current_timestamp <= last_timestamp {
         sleep(Duration::from_nanos(backoff_cooldown_ns));
-        current_timestamp = timestamp_from_custom_epoch(custom_epoch, micros_ten_power);
+        current_timestamp = timestamp_from_custom_epoch(custom_epoch, micros_ten_power)?;
         // Double the cooldown wait period (exponential backoff)
         backoff_cooldown_ns
             .checked_add(backoff_cooldown_ns)
@@ -155,6 +156,7 @@ fn wait_next_timestamp(
                 backoff_cooldown_ns
             ));
     }
+    Ok(())
 }
 
 fn wait_until_last_timestamp(
@@ -162,12 +164,12 @@ fn wait_until_last_timestamp(
     custom_epoch: SystemTime,
     micros_ten_power: u8,
     backoff_cooldown_start_ns: u64,
-) {
-    let mut current_timestamp = timestamp_from_custom_epoch(custom_epoch, micros_ten_power);
+) -> Result<(), SequenceGeneratorSystemTimeError> {
+    let mut current_timestamp = timestamp_from_custom_epoch(custom_epoch, micros_ten_power)?;
     let backoff_cooldown_ns: u64 = backoff_cooldown_start_ns;
     while current_timestamp < last_timestamp {
         sleep(Duration::from_nanos(backoff_cooldown_ns));
-        current_timestamp = timestamp_from_custom_epoch(custom_epoch, micros_ten_power);
+        current_timestamp = timestamp_from_custom_epoch(custom_epoch, micros_ten_power)?;
         // Double the cooldown wait period (exponential backoff)
         backoff_cooldown_ns
             .checked_add(backoff_cooldown_ns)
@@ -176,6 +178,7 @@ fn wait_until_last_timestamp(
                 backoff_cooldown_ns
             ));
     }
+    Ok(())
 }
 
 fn to_id_cached(properties: &mut SequenceProperties) -> u64 {
@@ -244,7 +247,14 @@ mod tests {
             .as_millis();
         sleep(Duration::from_millis(50));
         // Test UNIX EPOCH
-        let millis_after = timestamp_from_custom_epoch(UNIX_EPOCH, 3);
+        let millis_after = timestamp_from_custom_epoch(UNIX_EPOCH, 3).map_or_else(
+            |error| {
+                panic!(format!(
+                    "SequenceGeneratorSystemTimeError: Failed to get timestamp from custom epoch {:?}, difference {:?}",
+                    UNIX_EPOCH, (error as SequenceGeneratorSystemTimeError).duration()
+                ))
+            },
+            |duration| duration);
         // More than expected 50ms. Upper boundary cannot be ascertained as Normal distribution
         // CPU low-power states and/or older hardware can cause signifficant differences.
         // (although rather then a Normal distribution, it is instead the case that a Pareto
@@ -259,7 +269,14 @@ mod tests {
         let custom_epoch = UNIX_EPOCH
             .checked_add(Duration::from_millis(millis_start as u64))
             .expect("Error: Failed to create custom epoch.");
-        let tenths_millis_custom_epoch_time = timestamp_from_custom_epoch(custom_epoch, 2);
+        let tenths_millis_custom_epoch_time = timestamp_from_custom_epoch(custom_epoch, 2).map_or_else(
+            |error| {
+                panic!(format!(
+                    "SequenceGeneratorSystemTimeError: Failed to get current timestamp from custom epoch {:?}, difference {:?}",
+                    UNIX_EPOCH, (error as SequenceGeneratorSystemTimeError).duration()
+                ))
+            },
+            |timestamp| timestamp);
         // Wait a bit to prevent Option to call unwrap() on None below
         // If both timestamps are within small margin substraction of u64
         // can result in 'panicked at attempt to subtract with overflow'
@@ -267,11 +284,15 @@ mod tests {
         sleep(Duration::from_millis(2));
         // convert elapsed time from microseconds into tenths of a millisecond (0,1ms = 100 mcs)
         let power_two: u32 = 2;
-        let tenths_millis_elapsed_time = (time_now
-            .elapsed()
-            .expect("Error: Failed to get elapsed time.")
-            .as_micros() as u64)
-            / (10 as u64).pow(power_two);
+        let tenths_millis_elapsed_time = (time_now.elapsed().map_or_else(
+            |error| {
+                panic!(format!(
+                    "SequenceGeneratorSystemTimeError: Failed to get elapsed time, difference {:?}",
+                    (error as SequenceGeneratorSystemTimeError).duration()
+                ))
+            },
+            |duration| duration.as_micros() as u64,
+        )) / (10 as u64).pow(power_two);
         let substracted_times = tenths_millis_elapsed_time
             .checked_sub(tenths_millis_custom_epoch_time)
             .unwrap();
@@ -295,7 +316,12 @@ mod tests {
             .expect("Error: Failed to get duration from epoch of timestamp 50ms into the future.")
             .as_millis() as u64;
         // Function itself serves as an sleep call if correct
-        wait_until_last_timestamp(calculated_time_after_50ms, UNIX_EPOCH, 3, 1500);
+        wait_until_last_timestamp(calculated_time_after_50ms, UNIX_EPOCH, 3, 1500).expect(
+            &format!(
+            "SequenceGeneratorSystemTimeError: Couldn't wait until timestamp '{}' with custom epoch '{:?}'",
+            calculated_time_after_50ms, UNIX_EPOCH
+        ),
+        );
         // Wait a bit to prevent Option to call unwrap() on None below
         // If both timestamps are within small margin substraction of u64
         // can result in 'panicked at attempt to subtract with overflow'
@@ -333,7 +359,10 @@ mod tests {
             .expect("Error: Failed to get duration from epoch of timestamp 10ms into the future.")
             .as_millis() as u64;
         // Function itself serves as an sleep call if correct
-        wait_next_timestamp(calculated_time_after_10ms, UNIX_EPOCH, 3, 1500);
+        wait_next_timestamp(calculated_time_after_10ms, UNIX_EPOCH, 3, 1500).expect(&format!(
+            "SequenceGeneratorSystemTimeError: Couldn't wait until timestamp '{}' with custom epoch '{:?}'",
+            calculated_time_after_10ms, UNIX_EPOCH
+        ));
         let time_after_11ms: u64 = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Error: Failed to get current time as duration from epoch.")
@@ -393,9 +422,20 @@ mod tests {
             UNIX_EPOCH,
             micros_ten_power,
             backoff_cooldown_start_ns,
-        );
+        )
+        .expect(&format!(
+            "SequenceGeneratorSystemTimeError: Couldn't wait until timestamp '{}' with custom epoch '{:?}'",
+            last_timestamp, UNIX_EPOCH
+        ));
         for element in vector_ids.iter_mut() {
-            *element = generate_id(&mut properties);
+            *element = generate_id(&mut properties).map_or_else(
+                |error| {
+                    panic!(format!(
+                        "SequenceGeneratorSystemTimeError: Failed to get timestamp from custom epoch {:?}, difference {:?}",
+                        UNIX_EPOCH, (error as SequenceGeneratorSystemTimeError).duration()
+                    ))
+                },
+                |duration| duration);
         }
         let decoded_timestamp = decode_id_unix_epoch_micros(vector_ids[0], &properties);
         assert!(((decoded_timestamp / 10_000) - (last_timestamp + 1)) < 15);

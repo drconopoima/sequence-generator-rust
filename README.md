@@ -129,7 +129,7 @@ let properties = sequence_generator::SequenceProperties::new(
     );
 
 // Generate an ID
-let id = sequence_generator::generate_id(&mut properties);
+let id = sequence_generator::generate_id(&mut properties).unwrap();
 // Decode ID
 // Timestamp
 let timestamp_micros = sequence_generator::decode_id_unix_epoch_micros(id, &properties);
