@@ -33,60 +33,60 @@ fn main() {
     let mut args = Opt::from_args();
     let dotenv_file = &args.dotenv_file;
     if Path::new(dotenv_file).exists() {
-        dotenv::from_filename(dotenv_file).expect(&format!(
+        dotenv::from_filename(dotenv_file).unwrap_or_else(|_| {panic!(
             "Error: Could not retrieve environment variables from configuration file '{}'",
             dotenv_file
-        ));
+        )});
         for (key, value) in env::vars() {
-            if key == "CUSTOM_EPOCH" && value != "" {
-                args.custom_epoch = value.parse::<String>().expect(&format!(
+            if key == "CUSTOM_EPOCH" && !value.is_empty() {
+                args.custom_epoch = value.parse::<String>().unwrap_or_else(|_| {panic!(
                     "Error: Couldn't parse value CUSTOM_EPOCH '{}' as String, invalid UTF-8 characters", value)
-                );
+                });
             }
-            if key == "NODE_ID_BITS" && value != "" {
-                args.node_id_bits = value.parse::<u8>().expect(&format!(
+            if key == "NODE_ID_BITS" && !value.is_empty() {
+                args.node_id_bits = value.parse::<u8>().unwrap_or_else(|_| {panic!(
                     "Error: NODE_ID_BITS '{}' couldn't be interpreted as value between 0 and 64",
                     value
-                ));
+                )});
             }
-            if key == "SEQUENCE_BITS" && value != "" {
-                args.sequence_bits = value.parse::<u8>().expect(&format!(
+            if key == "SEQUENCE_BITS" && !value.is_empty() {
+                args.sequence_bits = value.parse::<u8>().unwrap_or_else(|_| {panic!(
                     "Error: SEQUENCE_BITS '{}' couldn't be interpreted as value between 0 and 64",
                     value
-                ));
+                )});
             }
-            if key == "MICROS_TEN_POWER" && value != "" {
-                args.micros_ten_power = value.parse::<u8>().expect(&format!(
+            if key == "MICROS_TEN_POWER" && !value.is_empty() {
+                args.micros_ten_power = value.parse::<u8>().unwrap_or_else(|_| {panic!(
                     "Error: MICROS_TEN_POWER '{}' couldn't be interpreted as value between 0 and 64", value)
-                );
+                });
             }
-            if key == "UNUSED_BITS" && value != "" {
-                args.unused_bits = value.parse::<u8>().expect(&format!(
+            if key == "UNUSED_BITS" && !value.is_empty() {
+                args.unused_bits = value.parse::<u8>().unwrap_or_else(|_| {panic!(
                     "Error: UNUSED_BITS '{}' couldn't be interpreted as value between 0 and 64",
                     value
-                ));
+                )});
             }
-            if key == "COOLDOWN_NS" && value != "" {
-                args.cooldown_ns = value.parse::<u64>().expect(&format!(
+            if key == "COOLDOWN_NS" && !value.is_empty() {
+                args.cooldown_ns = value.parse::<u64>().unwrap_or_else(|_| {panic!(
                     "Error: COOLDOWN_NS '{}' couldn't be interpreted as an unsigned integer value",
                     value
-                ));
+                )});
             }
         }
     }
 
     let custom_epoch_millis = DateTime::parse_from_rfc3339(&args.custom_epoch)
-        .expect(&format!(
+        .unwrap_or_else(|_| {panic!(
             "Error: Could not parse CUSTOM_EPOCH '{}' as an RFC-3339/ISO-8601 datetime.",
             args.custom_epoch
-        ))
+        )})
         .timestamp_millis();
     let custom_epoch = UNIX_EPOCH
         .checked_add(Duration::from_millis(custom_epoch_millis as u64))
-        .expect(&format!(
+        .unwrap_or_else(|| {panic!(
             "Error: Could not generate a SystemTime custom epoch from milliseconds timestamp '{}'",
             custom_epoch_millis
-        ));
+        )});
     let mut properties = sequence_generator::SequenceProperties::new(
         custom_epoch,
         args.node_id_bits,
@@ -102,11 +102,11 @@ fn main() {
         for element in vector_ids.iter_mut() {
             *element = sequence_generator::generate_id(&mut properties).unwrap_or_else(
                 |error| {
-                    panic!(format!(
+                    panic!(
                         "SequenceGeneratorError: Failed to get ID from properties {:?}. SystemTimeError difference {:?}",
                         properties,
                         (error).duration()
-                    ))
+                    )
                 }
             );
         }
@@ -122,11 +122,11 @@ fn main() {
         for (index, element) in vector_ids.iter_mut().enumerate() {
             *element = sequence_generator::generate_id(&mut properties).unwrap_or_else(
                 |error| {
-                    panic!(format!(
+                    panic!(
                         "SequenceGeneratorError: Failed to get ID from properties {:?}. SystemTimeError difference {:?}",
                         properties,
                         (error).duration()
-                    ))
+                    )
                 });
             println!("{}: {}", index, element);
         }
