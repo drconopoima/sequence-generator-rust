@@ -151,10 +151,12 @@ fn wait_next_timestamp(
         // Double the cooldown wait period (exponential backoff)
         backoff_cooldown_ns
             .checked_add(backoff_cooldown_ns)
-            .unwrap_or_else(|| {panic!(
-                "Error: Cannot double backoff cooldown, maximum value reached '{}'",
-                backoff_cooldown_ns
-            )});
+            .unwrap_or_else(|| {
+                panic!(
+                    "Error: Cannot double backoff cooldown, maximum value reached '{}'",
+                    backoff_cooldown_ns
+                )
+            });
     }
     Ok(())
 }
@@ -173,10 +175,12 @@ fn wait_until_last_timestamp(
         // Double the cooldown wait period (exponential backoff)
         backoff_cooldown_ns
             .checked_add(backoff_cooldown_ns)
-            .unwrap_or_else(|| {panic!(
-                "Error: Cannot double backoff cooldown, maximum value reached '{}'",
-                backoff_cooldown_ns
-            )});
+            .unwrap_or_else(|| {
+                panic!(
+                    "Error: Cannot double backoff cooldown, maximum value reached '{}'",
+                    backoff_cooldown_ns
+                )
+            });
     }
     Ok(())
 }
@@ -280,7 +284,8 @@ mod tests {
         let power_two: u32 = 2;
         let tenths_millis_elapsed_time = (time_now.elapsed().map_or_else(
             |error| {
-                panic!("SequenceGeneratorSystemTimeError: Failed to get elapsed time, difference {:?}",
+                panic!(
+                    "SequenceGeneratorSystemTimeError: Failed to get elapsed time, difference {:?}",
                     (error).duration()
                 )
             },

@@ -33,10 +33,12 @@ fn main() {
     let mut args = Opt::from_args();
     let dotenv_file = &args.dotenv_file;
     if Path::new(dotenv_file).exists() {
-        dotenv::from_filename(dotenv_file).unwrap_or_else(|_| {panic!(
-            "Error: Could not retrieve environment variables from configuration file '{}'",
-            dotenv_file
-        )});
+        dotenv::from_filename(dotenv_file).unwrap_or_else(|_| {
+            panic!(
+                "Error: Could not retrieve environment variables from configuration file '{}'",
+                dotenv_file
+            )
+        });
         for (key, value) in env::vars() {
             if key == "CUSTOM_EPOCH" && !value.is_empty() {
                 args.custom_epoch = value.parse::<String>().unwrap_or_else(|_| {panic!(
@@ -44,16 +46,20 @@ fn main() {
                 });
             }
             if key == "NODE_ID_BITS" && !value.is_empty() {
-                args.node_id_bits = value.parse::<u8>().unwrap_or_else(|_| {panic!(
+                args.node_id_bits = value.parse::<u8>().unwrap_or_else(|_| {
+                    panic!(
                     "Error: NODE_ID_BITS '{}' couldn't be interpreted as value between 0 and 64",
                     value
-                )});
+                )
+                });
             }
             if key == "SEQUENCE_BITS" && !value.is_empty() {
-                args.sequence_bits = value.parse::<u8>().unwrap_or_else(|_| {panic!(
+                args.sequence_bits = value.parse::<u8>().unwrap_or_else(|_| {
+                    panic!(
                     "Error: SEQUENCE_BITS '{}' couldn't be interpreted as value between 0 and 64",
                     value
-                )});
+                )
+                });
             }
             if key == "MICROS_TEN_POWER" && !value.is_empty() {
                 args.micros_ten_power = value.parse::<u8>().unwrap_or_else(|_| {panic!(
@@ -61,32 +67,40 @@ fn main() {
                 });
             }
             if key == "UNUSED_BITS" && !value.is_empty() {
-                args.unused_bits = value.parse::<u8>().unwrap_or_else(|_| {panic!(
-                    "Error: UNUSED_BITS '{}' couldn't be interpreted as value between 0 and 64",
-                    value
-                )});
+                args.unused_bits = value.parse::<u8>().unwrap_or_else(|_| {
+                    panic!(
+                        "Error: UNUSED_BITS '{}' couldn't be interpreted as value between 0 and 64",
+                        value
+                    )
+                });
             }
             if key == "COOLDOWN_NS" && !value.is_empty() {
-                args.cooldown_ns = value.parse::<u64>().unwrap_or_else(|_| {panic!(
+                args.cooldown_ns = value.parse::<u64>().unwrap_or_else(|_| {
+                    panic!(
                     "Error: COOLDOWN_NS '{}' couldn't be interpreted as an unsigned integer value",
                     value
-                )});
+                )
+                });
             }
         }
     }
 
     let custom_epoch_millis = DateTime::parse_from_rfc3339(&args.custom_epoch)
-        .unwrap_or_else(|_| {panic!(
-            "Error: Could not parse CUSTOM_EPOCH '{}' as an RFC-3339/ISO-8601 datetime.",
-            args.custom_epoch
-        )})
+        .unwrap_or_else(|_| {
+            panic!(
+                "Error: Could not parse CUSTOM_EPOCH '{}' as an RFC-3339/ISO-8601 datetime.",
+                args.custom_epoch
+            )
+        })
         .timestamp_millis();
     let custom_epoch = UNIX_EPOCH
         .checked_add(Duration::from_millis(custom_epoch_millis as u64))
-        .unwrap_or_else(|| {panic!(
+        .unwrap_or_else(|| {
+            panic!(
             "Error: Could not generate a SystemTime custom epoch from milliseconds timestamp '{}'",
             custom_epoch_millis
-        )});
+        )
+        });
     let mut properties = sequence_generator::SequenceProperties::new(
         custom_epoch,
         args.node_id_bits,
