@@ -100,7 +100,7 @@ cp .env-example .env
 
 And change the example values to your liking.
 
-The prevalence of the dotenv values is higher than CLI parameters passed.
+The precedence of parameters assigned through the command-line launch arguments is the highest, whichever are not assigned can be retrieved by use of a `.env` file, and if still unassigned parameters remains, then default values described above are used.
 
 The only supported custom epoch format is `RFC-3339/ISO-8601` both as CLI argument and from the dotenv file.
 
@@ -148,6 +148,10 @@ let id_node = sequence_generator::decode_node_id(id, &properties);
 ## Support
 
 Please [open an issue](https://github.com/drconopoima/sequence-generator-rust/issues/new) for support.
+
+## Changelog
+
+See [changelog](CHANGELOG.md)
 
 ## Contributing
 

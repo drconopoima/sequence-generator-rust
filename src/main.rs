@@ -1,30 +1,31 @@
 use ::sequence_generator::*;
-use chrono::DateTime;
+use std::convert::TryFrom;
 use std::env;
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use structopt::StructOpt;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 #[derive(Debug, StructOpt)]
 struct Opt {
     #[structopt(default_value = "1", long, short)]
     number: usize,
-    #[structopt(default_value = "2020-01-01T00:00:00Z", long, short)]
-    custom_epoch: String,
-    #[structopt(default_value = "2", long)]
-    micros_ten_power: u8,
-    #[structopt(default_value = "9", long)]
-    node_id_bits: u8,
-    #[structopt(default_value = "11", long)]
-    sequence_bits: u8,
-    #[structopt(default_value = "0", long)]
-    node_id: u16,
-    #[structopt(default_value = "0", long)]
-    unused_bits: u8,
+    #[structopt(long, short)]
+    custom_epoch: Option<String>,
+    #[structopt(long)]
+    micros_ten_power: Option<u8>,
+    #[structopt(long)]
+    node_id_bits: Option<u8>,
+    #[structopt(long)]
+    sequence_bits: Option<u8>,
+    #[structopt(long)]
+    node_id: Option<u16>,
+    #[structopt(long)]
+    unused_bits: Option<u8>,
     #[structopt(default_value = ".env", long)]
     dotenv_file: String,
-    #[structopt(default_value = "1500", long)]
-    cooldown_ns: u64,
+    #[structopt(long)]
+    cooldown_ns: Option<u64>,
     #[structopt(long, short)]
     debug: bool,
 }
@@ -40,59 +41,89 @@ fn main() {
             )
         });
         for (key, value) in env::vars() {
-            if key == "CUSTOM_EPOCH" && !value.is_empty() {
-                args.custom_epoch = value.parse::<String>().unwrap_or_else(|_| {panic!(
+            if key == "CUSTOM_EPOCH" && !value.is_empty() && args.custom_epoch.is_none() {
+                args.custom_epoch = Some(value.parse::<String>().unwrap_or_else(|_| {panic!(
                     "Error: Couldn't parse value CUSTOM_EPOCH '{}' as String, invalid UTF-8 characters", value)
-                });
+                }));
             }
-            if key == "NODE_ID_BITS" && !value.is_empty() {
-                args.node_id_bits = value.parse::<u8>().unwrap_or_else(|_| {
+            if key == "NODE_ID_BITS" && !value.is_empty() && args.node_id_bits.is_none() {
+                args.node_id_bits = Some(value.parse::<u8>().unwrap_or_else(|_| {
                     panic!(
                     "Error: NODE_ID_BITS '{}' couldn't be interpreted as value between 0 and 64",
                     value
                 )
-                });
+                }));
             }
-            if key == "SEQUENCE_BITS" && !value.is_empty() {
-                args.sequence_bits = value.parse::<u8>().unwrap_or_else(|_| {
+            if key == "SEQUENCE_BITS" && !value.is_empty() && args.sequence_bits.is_none() {
+                args.sequence_bits = Some(value.parse::<u8>().unwrap_or_else(|_| {
                     panic!(
                     "Error: SEQUENCE_BITS '{}' couldn't be interpreted as value between 0 and 64",
                     value
                 )
-                });
+                }));
             }
-            if key == "MICROS_TEN_POWER" && !value.is_empty() {
-                args.micros_ten_power = value.parse::<u8>().unwrap_or_else(|_| {panic!(
+            if key == "MICROS_TEN_POWER" && !value.is_empty() && args.micros_ten_power.is_none() {
+                args.micros_ten_power = Some(value.parse::<u8>().unwrap_or_else(|_| {panic!(
                     "Error: MICROS_TEN_POWER '{}' couldn't be interpreted as value between 0 and 64", value)
-                });
+                }));
             }
-            if key == "UNUSED_BITS" && !value.is_empty() {
-                args.unused_bits = value.parse::<u8>().unwrap_or_else(|_| {
+            if key == "UNUSED_BITS" && !value.is_empty() && args.unused_bits.is_none() {
+                args.unused_bits = Some(value.parse::<u8>().unwrap_or_else(|_| {
                     panic!(
                         "Error: UNUSED_BITS '{}' couldn't be interpreted as value between 0 and 64",
                         value
                     )
-                });
+                }));
             }
-            if key == "COOLDOWN_NS" && !value.is_empty() {
-                args.cooldown_ns = value.parse::<u64>().unwrap_or_else(|_| {
+            if key == "COOLDOWN_NS" && !value.is_empty() && args.cooldown_ns.is_none() {
+                args.cooldown_ns = Some(value.parse::<u64>().unwrap_or_else(|_| {
                     panic!(
                     "Error: COOLDOWN_NS '{}' couldn't be interpreted as an unsigned integer value",
                     value
                 )
-                });
+                }));
             }
         }
     }
+    if args.custom_epoch.is_none() {
+        args.custom_epoch = Some("2020-01-01T00:00:00Z".to_owned());
+    }
 
-    let custom_epoch_millis = DateTime::parse_from_rfc3339(&args.custom_epoch)
-        .unwrap_or_else(|_| {
-            panic!(
-                "Error: Could not parse CUSTOM_EPOCH '{}' as an RFC-3339/ISO-8601 datetime.",
-                args.custom_epoch
-            )
-        })
-        .timestamp_millis();
+    if args.micros_ten_power.is_none() {
+        args.micros_ten_power = Some(2_u8);
+    }
+
+    if args.node_id_bits.is_none() {
+        args.node_id_bits = Some(9_u8);
+    }
+
+    if args.sequence_bits.is_none() {
+        args.sequence_bits = Some(11_u8);
+    }
+
+    if args.node_id.is_none() {
+        args.node_id = Some(0_u16);
+    }
+
+    if args.unused_bits.is_none() {
+        args.unused_bits = Some(0_u8);
+    }
+
+    if args.cooldown_ns.is_none() {
+        args.cooldown_ns = Some(1500_u64);
+    }
+
+    let custom_epoch_millis_i128 =
+        OffsetDateTime::parse(args.custom_epoch.as_ref().unwrap(), &Rfc3339)
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Error: Could not parse CUSTOM_EPOCH '{}' as an RFC-3339/ISO-8601 datetime.",
+                    args.custom_epoch.as_ref().unwrap()
+                )
+            })
+            .unix_timestamp_nanos()
+            / 1000000;
+    let custom_epoch_millis = i64::try_from(custom_epoch_millis_i128).unwrap();
     let custom_epoch = UNIX_EPOCH
         .checked_add(Duration::from_millis(custom_epoch_millis as u64))
         .unwrap_or_else(|| {
@@ -103,12 +134,12 @@ fn main() {
         });
     let mut properties = sequence_generator::SequenceProperties::new(
         custom_epoch,
-        args.node_id_bits,
-        args.node_id,
-        args.sequence_bits,
-        args.micros_ten_power,
-        args.unused_bits,
-        args.cooldown_ns,
+        args.node_id_bits.unwrap(),
+        args.node_id.unwrap(),
+        args.sequence_bits.unwrap(),
+        args.micros_ten_power.unwrap(),
+        args.unused_bits.unwrap(),
+        args.cooldown_ns.unwrap(),
     );
     let mut vector_ids: Vec<u64> = vec![0; args.number];
     if args.debug {
