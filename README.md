@@ -27,34 +27,37 @@ You can generate sequential IDs based on timestamp, sequence number and node/wor
 
 By default this package format defines:
 
-- 44 bits are used to store a custom epoch with precision of 10 samples every millisecond (10^-1). That's enough to store 55 years from a custom epoch
-- 9 bits are used to store worker and/or host information (up to 512)
-- 11 bits are used to store a sequence number (up to 2048)
+- the right-most 9 bits are used to store worker and/or host information (up to 512)
+- subsequently, 11 bits are used to store a sequence number (up to 2048)
+- the left-most, 44 bits are used to store a custom epoch with precision of 10 samples every millisecond (10^-1). That's enough to store 55 years from a custom epoch
 - There are no bits left unused.
 - Custom epoch is set to the beginning of current decade (2020-01-01)
 
 ## Usage
 
-Expected output would be like the following
+Generate a single sequence number as follows, with a worker-id set up from `.env` file (default 0):
 
 ```sh
 $ cargo run \
-  0: 344656800457424896
+  0: 731587959438966784
 ```
 
-You can just as easily generate more than one ID from the CLI (`-n|--number`), as well as measure the time taken by the batch `-d|--debug`, providing a worker id of 0 (`--node-id`).
+Generate many sequence values (`-n|--number`), provide a custom worker id (`--node-id`), and measure the time taken (`-d|--debug`):
 
 ```sh
-$ cargo run --release -- -n 8 --node-id 505 --debug \
-  0: 344680846955905529
-  1: 344680846955906041
-  2: 344680846955906553
-  3: 344680846955907065
-  4: 344680846955907577
-  5: 344680846955908089
-  6: 344680846955908601
-  7: 344680846955909113
-  It took 611 nanoseconds
+cargo run --release -- -n 8 --node-id 505 --debug
+```
+
+```text
+0: 731586108621586937
+1: 731586108621587449
+2: 731586108621587961
+3: 731586108621588473
+4: 731586108621588985
+5: 731586108621589497
+6: 731586108621590009
+7: 731586108621590521
+It took 661 nanoseconds
 ```
 
 Each one of the parameters for the sequence are customizable.
@@ -82,14 +85,12 @@ $ cargo run --release -- -n 8 -d --unused-bits 1 --node-id-bits 10 --sequence-bi
 It took 571 nanoseconds
 ```
 
-I wouldn't use Twitter's values nowadays. Hardware has advanced enough that with a single thread of a laptop average processor I'm generating each ID in ~60-70 nanoseconds, even when reaching close to the maximum sequence and stalling a bit waiting for the next millisecond, while the Twitter's defaults always generate the full sequence and then stalls for 55% of the time waiting (averaging 135-145ns per ID). Twitter's snowflakes are optimal if the hardware takes 245ns per ID or more. Furthermore, having tenths of a millisecond precision means more accurate time & fast sorting if coupled with a Radix sort algorithm.
-
 The specific structure of the integers at the binary level includes:
 
-- The first few bits (customizable, by default none) might be unused and set to 0.
+- The left-most bits (customizable, by default none) might be unused and set to 0.
 - The second group of bits store the timestamp in a custom exponential by microseconds (by default `44 bits` and sampling every `100 mcs`, equivalent to argument `--micros-ten-power 2`). You cannot customize number of bits of the timestamp directly, but by indirectly setting different values for other bit groups.
 - The third group of bits store the sequence (by default `11 bits`)
-- The last group of bits store the host/worker ID (by default `9 bits`)
+- The right-most group of bits store the host/worker ID (by default `9 bits`)
 
 You can also customize by `dotenv` file. Copy the file `.env-example` into `.env`
 
@@ -103,6 +104,11 @@ The prevalence of the dotenv values is higher than CLI parameters passed.
 
 The only supported custom epoch format is `RFC-3339/ISO-8601` both as CLI argument and from the dotenv file.
 
+Check a detailed analysis for a generated value in the [auxiliar bit structure analysis](bit_structure.md)
+
+## Benchmarking
+
+See [auxiliar benchmarking notes](benchmarking.md)
 ## Library
 
 ```rust
