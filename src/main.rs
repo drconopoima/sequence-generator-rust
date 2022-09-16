@@ -2,6 +2,7 @@ use ::sequence_generator::*;
 use std::convert::TryFrom;
 use std::env;
 use std::path::Path;
+use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use structopt::StructOpt;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -132,7 +133,7 @@ fn main() {
             custom_epoch_millis
         )
         });
-    let mut properties = sequence_generator::SequenceProperties::new(
+    let properties = Rc::new(sequence_generator::SequenceProperties::new(
         custom_epoch,
         args.node_id_bits.unwrap(),
         args.node_id.unwrap(),
@@ -140,12 +141,12 @@ fn main() {
         args.micros_ten_power.unwrap(),
         args.unused_bits.unwrap(),
         args.cooldown_ns.unwrap(),
-    );
+    ));
     let mut vector_ids: Vec<u64> = vec![0; args.number];
     if args.debug {
         let time_now = SystemTime::now();
         for element in vector_ids.iter_mut() {
-            *element = sequence_generator::generate_id(&mut properties).unwrap_or_else(
+            *element = sequence_generator::generate_id(&properties).unwrap_or_else(
                 |error| {
                     panic!(
                         "SequenceGeneratorError: Failed to get ID from properties {:?}. SystemTimeError difference {:?}",
@@ -165,7 +166,7 @@ fn main() {
         println!("It took {:?} nanoseconds", elapsed);
     } else {
         for (index, element) in vector_ids.iter_mut().enumerate() {
-            *element = sequence_generator::generate_id(&mut properties).unwrap_or_else(
+            *element = sequence_generator::generate_id(&properties).unwrap_or_else(
                 |error| {
                     panic!(
                         "SequenceGeneratorError: Failed to get ID from properties {:?}. SystemTimeError difference {:?}",
