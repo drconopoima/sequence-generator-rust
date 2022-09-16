@@ -1,8 +1,8 @@
+use std::borrow::BorrowMut;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH};
-use std::cell::{Cell,RefCell};
-use std::borrow::BorrowMut;
-use std::rc::Rc;
 
 pub type SequenceGeneratorSystemTimeError = SystemTimeError;
 
@@ -82,7 +82,13 @@ impl SequenceProperties {
         }
     }
     pub fn set_last_timestamp(&self, timestamp: &mut Option<u64>) -> () {
-        let _ = self.last_timestamp.as_ref().borrow_mut().insert(timestamp.take().unwrap().clone());
+        if let Some(last_timestamp) = timestamp.take() {
+            let _ = self
+                .last_timestamp
+                .as_ref()
+                .borrow_mut()
+                .insert(last_timestamp);
+        }
     }
     pub fn set_current_timestamp(&self) -> () {
         let _ = self.current_timestamp.as_ref().borrow_mut().insert(timestamp_from_custom_epoch(
@@ -92,12 +98,16 @@ impl SequenceProperties {
         self.custom_epoch, self.micros_ten_power, error)}));
     }
     pub fn set_partial_cached_id(&self, cached_id: &mut Option<u64>) -> () {
-        let _ = self.partial_cached_id.as_ref().borrow_mut().insert(cached_id.take().unwrap().clone());
+        let _ = self
+            .partial_cached_id
+            .as_ref()
+            .borrow_mut()
+            .insert(cached_id.take().unwrap().clone());
     }
 }
 
 pub fn generate_id(
-    properties: SequenceProperties,
+    properties: &SequenceProperties,
 ) -> Result<u64, SequenceGeneratorSystemTimeError> {
     properties.set_last_timestamp(&mut properties.current_timestamp.clone().take().take());
     properties.set_current_timestamp();
@@ -132,7 +142,7 @@ pub fn generate_id(
     properties.sequence.set(properties.sequence.get() + 1);
     if properties.sequence.get() == properties.max_sequence {
         wait_next_timestamp(
-            properties.last_timestamp.borrow().unwrap(),
+            properties.current_timestamp.borrow().unwrap(),
             properties.custom_epoch,
             properties.micros_ten_power,
             properties.backoff_cooldown_start_ns,
@@ -405,22 +415,11 @@ mod tests {
         let node_id = rng.gen_range(0..65535);
         // if stalled until next millisecond, begin exponential backoff at 1,5 mcs
         let backoff_cooldown_start_ns = 1_000_000;
-        let properties = SequenceProperties::new(
-            custom_epoch,
-            node_id_bits,
-            node_id,
-            sequence_bits,
-            micros_ten_power,
-            unused_bits,
-            backoff_cooldown_start_ns,
-        );
-
         let last_timestamp = (SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Error: Failed to get current time as duration from epoch.")
             .as_millis()
             / 10) as u64;
-        let mut vector_ids: Vec<u64> = vec![0; 5];
         // Ensure a new fresh second
         wait_next_timestamp(
             last_timestamp,
@@ -432,8 +431,18 @@ mod tests {
             "SequenceGeneratorSystemTimeError: Couldn't wait until timestamp '{}' with custom epoch '{:?}'",
             last_timestamp, UNIX_EPOCH
         )});
+        let mut vector_ids: Vec<u64> = vec![0; 5];
+        let properties = SequenceProperties::new(
+            custom_epoch,
+            node_id_bits,
+            node_id,
+            sequence_bits,
+            micros_ten_power,
+            unused_bits,
+            backoff_cooldown_start_ns,
+        );
         for element in vector_ids.iter_mut() {
-            *element = generate_id(properties).unwrap_or_else(
+            *element = generate_id(&properties).unwrap_or_else(
                 |error| {
                     panic!(
                         "SequenceGeneratorSystemTimeError: Failed to get timestamp from custom epoch {:?}, difference {:?}",
