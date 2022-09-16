@@ -81,7 +81,7 @@ impl SequenceProperties {
             partial_cached_id: Rc::new(RefCell::new(None)),
         }
     }
-    pub fn set_last_timestamp(&self, timestamp: &mut Option<u64>) -> () {
+    pub fn set_last_timestamp(&self, timestamp: &mut Option<u64>) {
         if let Some(last_timestamp) = timestamp.take() {
             let _ = self
                 .last_timestamp
@@ -90,19 +90,19 @@ impl SequenceProperties {
                 .insert(last_timestamp);
         }
     }
-    pub fn set_current_timestamp(&self) -> () {
+    pub fn set_current_timestamp(&self) {
         let _ = self.current_timestamp.as_ref().borrow_mut().insert(timestamp_from_custom_epoch(
             self.custom_epoch,
             self.micros_ten_power,
         ).unwrap_or_else(|error| {panic!("Error: Could not calculate current timestamp from custom epoch {:?} and micros power of {:?}. Error: {}",
         self.custom_epoch, self.micros_ten_power, error)}));
     }
-    pub fn set_partial_cached_id(&self, cached_id: &mut Option<u64>) -> () {
+    pub fn set_partial_cached_id(&self, cached_id: &mut Option<u64>) {
         let _ = self
             .partial_cached_id
             .as_ref()
             .borrow_mut()
-            .insert(cached_id.take().unwrap().clone());
+            .insert(cached_id.take().unwrap());
     }
 }
 
@@ -138,7 +138,7 @@ pub fn generate_id(
             properties.sequence.set(0);
         }
     }
-    let new_id = to_id(&properties);
+    let new_id = to_id(properties);
     properties.sequence.set(properties.sequence.get() + 1);
     if properties.sequence.get() == properties.max_sequence {
         wait_next_timestamp(
