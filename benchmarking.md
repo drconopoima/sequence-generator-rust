@@ -9,7 +9,7 @@ The highest CPU scheduler priority of -19 is set with the nice command.
 ```sh
 for j in $(seq 1 10); do
   for i in $(seq 1 100); do
-    sudo nice -n -19 sudo -u ljdm ./target/release/sequence-generator-rust -n 163840 -d --node-id 128 2>/dev/null | grep nanoseconds;
+    sudo nice -n -19 sudo -u ljdm ./target/release/sequence_generator -n 163840 -d --node-id 128 2>/dev/null | grep nanoseconds;
    done | awk '{ print $3 }' | sort -n | head -n 2;
 done;
 ```
@@ -25,7 +25,7 @@ When using Twitter snowflake's default bit configuration, top 2% lows average 24
 ```sh
 for j in $(seq 1 10); do
   for i in $(seq 1 100); do
-    sudo nice -n -19 ./target/release/sequence-generator-rust -n 163840 -d --unused-bits 1 --node-id-bits 10 --sequence-bits 12 --micros-ten-power 3 --custom-epoch '2010-11-04T01:42:54Z' --node-id 128 2>/dev/null | grep nanoseconds;
+    sudo nice -n -19 ./target/release/sequence_generator -n 163840 -d --unused-bits 1 --node-id-bits 10 --sequence-bits 12 --micros-ten-power 3 --custom-epoch '2010-11-04T01:42:54Z' --node-id 128 2>/dev/null | grep nanoseconds;
   done | awk '{ print $3 }' | sort -n | head -n 2;
 done;
 ```
