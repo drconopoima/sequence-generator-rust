@@ -33,3 +33,5 @@ done;
 Twitter Snowflake's values consistently reach the maximum sequence ID and stall for 75% of the time while waiting for the next millisecond.
 
 Different hardware would perform differently, and individual optimization of bit configuration is recommended.
+
+I can recommend with better hardware than originally tested to use 8 bits for node-id and 12 bits for sequence id to get down to 46ns per generated id. Defaults were maintained at 9 and 11 for backwards compatibility

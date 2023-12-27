@@ -1,7 +1,7 @@
 [package]
 name = "sequence-generator-rust"
 description = "Customizable 64-bit unique distributed IDs sequence generator based on Twitter's ID (snowflake). Build in Rust"
-version = "0.3.2"
+version = "0.4.0"
 authors = ["Luis Jesus Diaz Manzo <luis@drconopoima.com>"]
 edition = "2018"
 license = "Apache-2.0"
