@@ -39,14 +39,14 @@ struct Opt {
     #[structopt(
         short = "-w",
         long = "--node-id-bits",
-        help = "Bits used for storing worker and datacenter information. [Default: 9 (range: 0-127). Maximum: 16. Minimum: 1]",
+        help = "Bits used for storing worker and datacenter information. [Default: 9 (range: 0-511). Maximum: 16. Minimum: 1]",
         env = "NODE_ID_BITS"
     )]
     node_id_bits: Option<u8>,
     #[structopt(
         short = "-s",
         long = "--sequence-bits",
-        help = "Bits used for contiguous sequence values. [Default: 11 (range: 0-511). Maximum: 16. Minimum: 1]",
+        help = "Bits used for contiguous sequence values. [Default: 11 (range: 0-2047). Maximum: 16. Minimum: 1]",
         env = "SEQUENCE_BITS"
     )]
     sequence_bits: Option<u8>,
@@ -78,7 +78,7 @@ struct Opt {
     dotenv_file: String,
     #[structopt(
         long = "--cooldown-ns",
-        help = "Initial time in nanoseconds for exponential backoff wait after sequence is exhausted. [Default: 1500]",
+        help = "Initial time in nanoseconds for exponential backoff wait after sequence is exhausted. [Default: 200]",
         env = "COOLDOWN_NS"
     )]
     cooldown_ns: Option<u64>,
@@ -232,7 +232,7 @@ fn main() {
     }
 
     if args.cooldown_ns.is_none() {
-        args.cooldown_ns = Some(1500_u64);
+        args.cooldown_ns = Some(200_u64);
     }
 
     if args.number.is_none() {
@@ -248,7 +248,6 @@ fn main() {
             process::exit(0x0100);
         }
     }
-
     let custom_epoch_millis_i128 =
         OffsetDateTime::parse(args.custom_epoch.as_ref().unwrap(), &Rfc3339)
             .unwrap_or_else(|_| {
@@ -298,7 +297,11 @@ fn main() {
         for (index, element) in vector_ids.into_iter().enumerate() {
             println!("{}: {}", index, element);
         }
-        println!("It took {:?} nanoseconds", elapsed);
+        println!(
+            "It took {} nanoseconds, time per id: {:.2} ns",
+            elapsed,
+            elapsed as f64 / args.number.unwrap() as f64
+        );
     } else {
         for (index, element) in vector_ids.iter_mut().enumerate() {
             *element = sequence_generator::generate_id(&properties).unwrap_or_else(
