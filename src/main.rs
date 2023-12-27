@@ -2,6 +2,7 @@ use ::sequence_generator::*;
 use std::convert::TryFrom;
 use std::env;
 use std::path::Path;
+use std::process;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use structopt::StructOpt;
@@ -9,25 +10,79 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 #[derive(Debug, StructOpt)]
 struct Opt {
-    #[structopt(default_value = "1", long, short)]
-    number: usize,
-    #[structopt(long, short)]
+    #[structopt(
+        short = "-n",
+        long = "--number",
+        help = "Amount/Quantity of sequence values requested. [Default: 1]"
+    )]
+    number: Option<usize>,
+    #[structopt(
+        short = "-q",
+        long = "--quantity",
+        help = "Amount/Quantity of sequence values requested. [Default: 1]"
+    )]
+    quantity: Option<usize>,
+    #[structopt(
+        short = "-c",
+        long = "--custom-epoch",
+        help = "Custom epoch in RFC3339 format. [Default: '2020-01-01T00:00:00Z' i.e. Jan 01 2020 00:00:00 UTC]",
+        env = "CUSTOM_EPOCH"
+    )]
     custom_epoch: Option<String>,
-    #[structopt(long)]
+    #[structopt(
+        short = "-m",
+        long = "--micros-ten-power",
+        help = "Exponent multiplier base 10 in microseconds for timestamp. [Default: 2 (operate in tenths of milliseconds)]",
+        env = "MICROS_TEN_POWER"
+    )]
     micros_ten_power: Option<u8>,
-    #[structopt(long)]
+    #[structopt(
+        short = "-w",
+        long = "--node-id-bits",
+        help = "Bits used for storing worker and datacenter information. [Default: 9 (range: 0-127). Maximum: 16. Minimum: 1]",
+        env = "NODE_ID_BITS"
+    )]
     node_id_bits: Option<u8>,
-    #[structopt(long)]
+    #[structopt(
+        short = "-s",
+        long = "--sequence-bits",
+        help = "Bits used for contiguous sequence values. [Default: 11 (range: 0-511). Maximum: 16. Minimum: 1]",
+        env = "SEQUENCE_BITS"
+    )]
     sequence_bits: Option<u8>,
-    #[structopt(long)]
+    #[structopt(
+        short = "-i",
+        long = "--node-id",
+        help = "Numerical identifier for worker and datacenter information. [Default: 0]",
+        env = "NODE_ID"
+    )]
     node_id: Option<u16>,
-    #[structopt(long)]
+    #[structopt(
+        short = "-u",
+        long = "--unused-bits",
+        help = "Unused (sign) bits at the left-most of the sequence ID. [Default: 0. Maximum: 8]",
+        env = "UNUSED_BITS"
+    )]
     unused_bits: Option<u8>,
-    #[structopt(default_value = ".env", long)]
+    #[structopt(
+        long = "--sign-bits",
+        help = "Unused (sign) bits at the left-most of the sequence ID. [Default: 0. Maximum: 8]",
+        env = "SIGN_BITS"
+    )]
+    sign_bits: Option<u8>,
+    #[structopt(
+        default_value = ".env",
+        long = "--dotenv-file",
+        help = "File for configuration variables. [Default: '${pwd}/.env']"
+    )]
     dotenv_file: String,
-    #[structopt(long)]
+    #[structopt(
+        long = "--cooldown-ns",
+        help = "Initial time in nanoseconds for exponential backoff wait after sequence is exhausted. [Default: 1500]",
+        env = "COOLDOWN_NS"
+    )]
     cooldown_ns: Option<u64>,
-    #[structopt(long, short)]
+    #[structopt(short = "-d", long = "--debug")]
     debug: bool,
 }
 
@@ -37,41 +92,50 @@ fn main() {
     if Path::new(dotenv_file).exists() {
         dotenv::from_filename(dotenv_file).unwrap_or_else(|_| {
             panic!(
-                "Error: Could not retrieve environment variables from configuration file '{}'",
+                "ERROR: Could not retrieve environment variables from configuration file '{}'",
                 dotenv_file
             )
         });
         for (key, value) in env::vars() {
             if key == "CUSTOM_EPOCH" && !value.is_empty() && args.custom_epoch.is_none() {
                 args.custom_epoch = Some(value.parse::<String>().unwrap_or_else(|_| {panic!(
-                    "Error: Couldn't parse value CUSTOM_EPOCH '{}' as String, invalid UTF-8 characters", value)
+                    "ERROR: Couldn't parse value CUSTOM_EPOCH '{}' as String, invalid UTF-8 characters", value)
                 }));
             }
             if key == "NODE_ID_BITS" && !value.is_empty() && args.node_id_bits.is_none() {
                 args.node_id_bits = Some(value.parse::<u8>().unwrap_or_else(|_| {
                     panic!(
-                    "Error: NODE_ID_BITS '{}' couldn't be interpreted as value between 0 and 64",
+                    "ERROR: NODE_ID_BITS '{}' couldn't be interpreted as value between 1 and 16",
                     value
                 )
                 }));
             }
+
             if key == "SEQUENCE_BITS" && !value.is_empty() && args.sequence_bits.is_none() {
                 args.sequence_bits = Some(value.parse::<u8>().unwrap_or_else(|_| {
                     panic!(
-                    "Error: SEQUENCE_BITS '{}' couldn't be interpreted as value between 0 and 64",
+                    "ERROR: SEQUENCE_BITS '{}' couldn't be interpreted as value between 1 and 16",
                     value
                 )
                 }));
             }
             if key == "MICROS_TEN_POWER" && !value.is_empty() && args.micros_ten_power.is_none() {
                 args.micros_ten_power = Some(value.parse::<u8>().unwrap_or_else(|_| {panic!(
-                    "Error: MICROS_TEN_POWER '{}' couldn't be interpreted as value between 0 and 64", value)
+                    "ERROR: MICROS_TEN_POWER '{}' couldn't be interpreted as value between 0 and 64", value)
                 }));
             }
             if key == "UNUSED_BITS" && !value.is_empty() && args.unused_bits.is_none() {
                 args.unused_bits = Some(value.parse::<u8>().unwrap_or_else(|_| {
                     panic!(
-                        "Error: UNUSED_BITS '{}' couldn't be interpreted as value between 0 and 64",
+                        "ERROR: UNUSED_BITS '{}' couldn't be interpreted as value between 0 and 8",
+                        value
+                    )
+                }));
+            }
+            if key == "SIGN_BITS" && !value.is_empty() && args.unused_bits.is_none() {
+                args.unused_bits = Some(value.parse::<u8>().unwrap_or_else(|_| {
+                    panic!(
+                        "ERROR: SIGN_BITS '{}' couldn't be interpreted as value between 0 and 8",
                         value
                     )
                 }));
@@ -79,13 +143,70 @@ fn main() {
             if key == "COOLDOWN_NS" && !value.is_empty() && args.cooldown_ns.is_none() {
                 args.cooldown_ns = Some(value.parse::<u64>().unwrap_or_else(|_| {
                     panic!(
-                    "Error: COOLDOWN_NS '{}' couldn't be interpreted as an unsigned integer value",
+                    "ERROR: COOLDOWN_NS '{}' couldn't be interpreted as an unsigned integer value",
                     value
                 )
                 }));
             }
         }
     }
+    if args.quantity.is_some() && args.number.is_some() {
+        panic!(
+            "ERROR: Conflicting parameters. Must only specify one of either '--quantity,-q' or '--number,-n'"
+        )
+    }
+    if args.sign_bits.is_some() && args.unused_bits.is_some() {
+        panic!(
+            "ERROR: Conflicting parameters. Must only specify one of either '--unused-bits,-u' or '--sign-bits'"
+        )
+    }
+    if let Some(value) = args.sign_bits {
+        if value > 8 {
+            panic!(
+                "ERROR: SIGN_BITS '{}' is larger than the maximum value of 8.",
+                value
+            )
+        }
+    };
+    if args.sign_bits.is_some() {
+        args.unused_bits = args.sign_bits;
+    }
+    if let Some(value) = args.unused_bits {
+        if value > 8 {
+            panic!(
+                "ERROR: UNUSED_BITS '{}' is larger than the maximum value of 8.",
+                value
+            )
+        }
+    };
+    if let Some(value) = args.sequence_bits {
+        if value > 16 {
+            panic!(
+                "ERROR: SEQUENCE_BITS '{}' is larger than the maximum value of 16.",
+                value
+            )
+        }
+        if value == 0 {
+            panic!(
+                "ERROR: SEQUENCE_BITS '{}' must be larger or equal than 1.",
+                value
+            )
+        }
+    };
+    if let Some(value) = args.node_id_bits {
+        if value > 16 {
+            panic!(
+                "ERROR: NODE_ID_BITS '{}' is larger than the maximum value of 16.",
+                value
+            )
+        }
+        if value == 0 {
+            panic!(
+                "ERROR: NODE_ID_BITS '{}' must be larger or equal than 1.",
+                value
+            )
+        }
+    };
     if args.custom_epoch.is_none() {
         args.custom_epoch = Some("2020-01-01T00:00:00Z".to_owned());
     }
@@ -114,11 +235,25 @@ fn main() {
         args.cooldown_ns = Some(1500_u64);
     }
 
+    if args.number.is_none() {
+        if let Some(value) = args.quantity {
+            args.number = Some(value)
+        } else {
+            args.number = Some(1_usize)
+        }
+    }
+    if let Some(value) = args.number {
+        if value == 0 {
+            println!("WARNING: No ids were requested. Exiting.");
+            process::exit(0x0100);
+        }
+    }
+
     let custom_epoch_millis_i128 =
         OffsetDateTime::parse(args.custom_epoch.as_ref().unwrap(), &Rfc3339)
             .unwrap_or_else(|_| {
                 panic!(
-                    "Error: Could not parse CUSTOM_EPOCH '{}' as an RFC-3339/ISO-8601 datetime.",
+                    "ERROR: Could not parse CUSTOM_EPOCH '{}' as an RFC-3339/ISO-8601 datetime.",
                     args.custom_epoch.as_ref().unwrap()
                 )
             })
@@ -129,7 +264,7 @@ fn main() {
         .checked_add(Duration::from_millis(custom_epoch_millis as u64))
         .unwrap_or_else(|| {
             panic!(
-            "Error: Could not generate a SystemTime custom epoch from milliseconds timestamp '{}'",
+            "ERROR: Could not generate a SystemTime custom epoch from milliseconds timestamp '{}'",
             custom_epoch_millis
         )
         });
@@ -142,7 +277,7 @@ fn main() {
         args.unused_bits.unwrap(),
         args.cooldown_ns.unwrap(),
     ));
-    let mut vector_ids: Vec<u64> = vec![0; args.number];
+    let mut vector_ids: Vec<u64> = vec![0; args.number.unwrap()];
     if args.debug {
         let time_now = SystemTime::now();
         for element in vector_ids.iter_mut() {
@@ -158,7 +293,7 @@ fn main() {
         }
         let elapsed = time_now
             .elapsed()
-            .expect("Error: Failed to get elapsed time.")
+            .expect("ERROR: Failed to get elapsed time.")
             .as_nanos();
         for (index, element) in vector_ids.into_iter().enumerate() {
             println!("{}: {}", index, element);

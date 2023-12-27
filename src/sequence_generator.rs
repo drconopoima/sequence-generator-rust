@@ -73,7 +73,7 @@ impl SequenceProperties {
             micros_ten_power,
             node_id,
             unused_bits,
-            sequence: Cell::new(0),
+            sequence: Cell::new(0_u16),
             current_timestamp: Rc::new(RefCell::new(None)),
             last_timestamp: Rc::new(RefCell::new(None)),
             max_sequence: (2_u16).pow(sequence_bits.into()),
@@ -204,7 +204,7 @@ fn wait_until_last_timestamp(
 
 fn to_id_cached(properties: &SequenceProperties) -> u64 {
     let mut id = properties.partial_cached_id.as_ref().borrow().unwrap();
-    id |= ((properties.sequence.get() as u64) << properties.node_id_bits) as u64;
+    id |= (properties.sequence.get() as u64) << properties.node_id_bits;
     id
 }
 
