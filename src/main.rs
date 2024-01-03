@@ -60,7 +60,7 @@ struct Opt {
     #[structopt(
         short = "-u",
         long = "--unused-bits",
-        help = "Unused (sign) bits at the left-most of the sequence ID. [Default: 0. Maximum: 8]",
+        help = "Unused (sign) bits at the left-most of the sequence ID. [Default: 0. Maximum: 7]",
         env = "UNUSED_BITS"
     )]
     unused_bits: Option<u8>,
@@ -78,7 +78,7 @@ struct Opt {
     dotenv_file: String,
     #[structopt(
         long = "--cooldown-ns",
-        help = "Initial time in nanoseconds for exponential backoff wait after sequence is exhausted. [Default: 200]",
+        help = "Initial time in nanoseconds for exponential backoff wait after sequence is exhausted. [Default: 1000]",
         env = "COOLDOWN_NS"
     )]
     cooldown_ns: Option<u64>,
@@ -127,7 +127,7 @@ fn main() {
             if key == "UNUSED_BITS" && !value.is_empty() && args.unused_bits.is_none() {
                 args.unused_bits = Some(value.parse::<u8>().unwrap_or_else(|_| {
                     panic!(
-                        "ERROR: UNUSED_BITS '{}' couldn't be interpreted as value between 0 and 8",
+                        "ERROR: UNUSED_BITS '{}' couldn't be interpreted as value between 0 and 7",
                         value
                     )
                 }));
@@ -135,7 +135,7 @@ fn main() {
             if key == "SIGN_BITS" && !value.is_empty() && args.unused_bits.is_none() {
                 args.unused_bits = Some(value.parse::<u8>().unwrap_or_else(|_| {
                     panic!(
-                        "ERROR: SIGN_BITS '{}' couldn't be interpreted as value between 0 and 8",
+                        "ERROR: SIGN_BITS '{}' couldn't be interpreted as value between 0 and 7",
                         value
                     )
                 }));
@@ -161,9 +161,9 @@ fn main() {
         )
     }
     if let Some(value) = args.sign_bits {
-        if value > 8 {
+        if value > 7 {
             panic!(
-                "ERROR: SIGN_BITS '{}' is larger than the maximum value of 8.",
+                "ERROR: SIGN_BITS '{}' is larger than the maximum value of 7.",
                 value
             )
         }
@@ -172,9 +172,9 @@ fn main() {
         args.unused_bits = args.sign_bits;
     }
     if let Some(value) = args.unused_bits {
-        if value > 8 {
+        if value > 7 {
             panic!(
-                "ERROR: UNUSED_BITS '{}' is larger than the maximum value of 8.",
+                "ERROR: UNUSED_BITS '{}' is larger than the maximum value of 7.",
                 value
             )
         }
@@ -232,7 +232,7 @@ fn main() {
     }
 
     if args.cooldown_ns.is_none() {
-        args.cooldown_ns = Some(200_u64);
+        args.cooldown_ns = Some(1000_u64);
     }
 
     if args.number.is_none() {
