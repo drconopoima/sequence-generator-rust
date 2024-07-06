@@ -1,73 +1,67 @@
 use ::sequence_generator::*;
+use clap::Parser;
 use std::convert::TryFrom;
 use std::env;
 use std::path::Path;
 use std::process;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use structopt::StructOpt;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
-#[derive(Debug, StructOpt)]
+#[derive(clap::StructOpt, Debug)]
+#[clap(version, about, long_about = None)]
 struct Opt {
     #[structopt(
-        short = "-n",
+        short = 'n',
         long = "--number",
         help = "Amount/Quantity of sequence values requested. [Default: 1]"
     )]
     number: Option<usize>,
     #[structopt(
-        short = "-q",
+        short = 'q',
         long = "--quantity",
         help = "Amount/Quantity of sequence values requested. [Default: 1]"
     )]
     quantity: Option<usize>,
     #[structopt(
-        short = "-c",
+        short = 'c',
         long = "--custom-epoch",
-        help = "Custom epoch in RFC3339 format. [Default: '2020-01-01T00:00:00Z' i.e. Jan 01 2020 00:00:00 UTC]",
-        env = "CUSTOM_EPOCH"
+        help = "Custom epoch in RFC3339 format. [Default: '2020-01-01T00:00:00Z' i.e. Jan 01 2020 00:00:00 UTC]"
     )]
     custom_epoch: Option<String>,
     #[structopt(
-        short = "-m",
+        short = 'm',
         long = "--micros-ten-power",
-        help = "Exponent multiplier base 10 in microseconds for timestamp. [Default: 2 (operate in tenths of milliseconds)]",
-        env = "MICROS_TEN_POWER"
+        help = "Exponent multiplier base 10 in microseconds for timestamp. [Default: 2 (operate in tenths of milliseconds)]"
     )]
     micros_ten_power: Option<u8>,
     #[structopt(
-        short = "-w",
+        short = 'w',
         long = "--node-id-bits",
-        help = "Bits used for storing worker and datacenter information. [Default: 9 (range: 0-511). Maximum: 16. Minimum: 1]",
-        env = "NODE_ID_BITS"
+        help = "Bits used for storing worker and datacenter information. [Default: 9 (range: 0-511). Maximum: 16. Minimum: 1]"
     )]
     node_id_bits: Option<u8>,
     #[structopt(
-        short = "-s",
+        short = 's',
         long = "--sequence-bits",
-        help = "Bits used for contiguous sequence values. [Default: 11 (range: 0-2047). Maximum: 16. Minimum: 1]",
-        env = "SEQUENCE_BITS"
+        help = "Bits used for contiguous sequence values. [Default: 11 (range: 0-2047). Maximum: 16. Minimum: 1]"
     )]
     sequence_bits: Option<u8>,
     #[structopt(
-        short = "-i",
+        short = 'i',
         long = "--node-id",
-        help = "Numerical identifier for worker and datacenter information. [Default: 0]",
-        env = "NODE_ID"
+        help = "Numerical identifier for worker and datacenter information. [Default: 0]"
     )]
     node_id: Option<u16>,
     #[structopt(
-        short = "-u",
+        short = 'u',
         long = "--unused-bits",
-        help = "Unused (sign) bits at the left-most of the sequence ID. [Default: 0. Maximum: 7]",
-        env = "UNUSED_BITS"
+        help = "Unused (sign) bits at the left-most of the sequence ID. [Default: 0. Maximum: 7]"
     )]
     unused_bits: Option<u8>,
     #[structopt(
         long = "--sign-bits",
-        help = "Unused (sign) bits at the left-most of the sequence ID. [Default: 0. Maximum: 8]",
-        env = "SIGN_BITS"
+        help = "Unused (sign) bits at the left-most of the sequence ID. [Default: 0. Maximum: 8]"
     )]
     sign_bits: Option<u8>,
     #[structopt(
@@ -78,19 +72,24 @@ struct Opt {
     dotenv_file: String,
     #[structopt(
         long = "--cooldown-ns",
-        help = "Initial time in nanoseconds for exponential backoff wait after sequence is exhausted. [Default: 1000]",
-        env = "COOLDOWN_NS"
+        help = "Initial time in nanoseconds for exponential backoff wait after sequence is exhausted. [Default: 1000]"
     )]
     cooldown_ns: Option<u64>,
-    #[structopt(short = "-d", long = "--debug")]
+    #[structopt(
+        short = 'd',
+        long = "--debug",
+        help = "Show total time and time per generated ID in nanoseconds"
+    )]
     debug: bool,
+    #[structopt(short = 'V', long = "--version", help = "Show release version number")]
+    version: bool,
 }
 
 fn main() {
     let mut args = Opt::from_args();
     let dotenv_file = &args.dotenv_file;
     if Path::new(dotenv_file).exists() {
-        dotenv::from_filename(dotenv_file).unwrap_or_else(|_| {
+        dotenvy::from_filename(dotenv_file).unwrap_or_else(|_| {
             panic!(
                 "ERROR: Could not retrieve environment variables from configuration file '{}'",
                 dotenv_file
