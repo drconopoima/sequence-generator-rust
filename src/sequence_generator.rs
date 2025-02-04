@@ -438,9 +438,9 @@ mod tests {
         let sequence_bits = 2;
         // in centiseconds (10^4 mcs)
         let micros_ten_power = 4;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         // 0..2^16-1
-        let node_id = rng.gen_range(0..65535);
+        let node_id = rng.random_range(0..65535);
         // if stalled until next millisecond, begin exponential backoff at 1,5 mcs
         let backoff_cooldown_start_ns = 1_000_000;
         let last_timestamp = (SystemTime::now()
